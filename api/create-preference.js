@@ -1,4 +1,4 @@
-import mercadopago from 'mercadopago';
+import { MercadoPagoConfig, Preference } from 'mercadopago';
 
 export default async function handler(req, res) {
   // Solo permitir método POST
@@ -7,10 +7,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Configurar credenciales
-    mercadopago.configure({
-      access_token: process.env.MERCADOPAGO_ACCESS_TOKEN
+    // Validar que existe el access token
+    if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+      console.error('MERCADOPAGO_ACCESS_TOKEN no está configurado');
+      return res.status(500).json({
+        error: 'Error de configuración: MERCADOPAGO_ACCESS_TOKEN no está configurado'
+      });
+    }
+
+    // Configurar cliente de Mercado Pago (SDK v2)
+    const client = new MercadoPagoConfig({ 
+      accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN 
     });
+    const preference = new Preference(client);
 
     // Obtener datos del pago del body
     const {
@@ -37,8 +46,8 @@ export default async function handler(req, res) {
     const areaCode = phoneNumber.substring(0, 2) || '11';
     const number = phoneNumber.substring(2) || '';
 
-    // Crear preferencia de pago
-    const preference = {
+    // Crear preferencia de pago (formato SDK v2)
+    const preferenceData = {
       items: [
         {
           title: tournamentName,
@@ -63,23 +72,23 @@ export default async function handler(req, res) {
       auto_return: 'approved',
       external_reference: ticketId || `ticket-${Date.now()}`,
       statement_descriptor: 'TORNEO TRUCO',
-      notification_url: `${baseUrl || 'https://trucoapp.vercel.app'}/api/webhook/mercadopago` // Para webhooks (opcional)
+      notification_url: `${baseUrl || 'https://trucoapp.vercel.app'}/api/webhook/mercadopago`
     };
 
-    // Crear la preferencia en Mercado Pago
-    const response = await mercadopago.preferences.create(preference);
+    // Crear la preferencia en Mercado Pago (formato SDK v2)
+    const response = await preference.create({ body: preferenceData });
 
     // Devolver la URL de pago (init_point)
     return res.status(200).json({
-      init_point: response.body.init_point,
-      preference_id: response.body.id
+      init_point: response.init_point,
+      preference_id: response.id
     });
 
   } catch (error) {
     console.error('Error al crear preferencia de Mercado Pago:', error);
     return res.status(500).json({
       error: 'Error al crear preferencia de pago',
-      message: error.message
+      message: error.message || 'Error desconocido'
     });
   }
 }
