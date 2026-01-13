@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Trophy, User, Mail, Phone, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react'
+import { Trophy, User, Mail, Phone, CheckCircle, AlertCircle, ArrowRight, Contact } from 'lucide-react'
 import { signUpWithRole } from '../services/authService'
 import { useToast } from '../hooks/useToast'
 import { ToastContainer } from '../components/Toast'
@@ -24,6 +24,7 @@ function Register() {
   const [tournamentName, setTournamentName] = useState('')
   const [tournamentAmount, setTournamentAmount] = useState(null)
   const [initializing, setInitializing] = useState(true)
+  const [contactPickerAvailable, setContactPickerAvailable] = useState(false)
 
   useEffect(() => {
     const initialize = async () => {
@@ -58,9 +59,19 @@ function Register() {
           }
         }
 
-        // En móvil, los campos pueden usar autocompletado del navegador
-        // No hay API de contactos disponible por privacidad, pero el navegador
-        // puede sugerir datos guardados automáticamente
+        // Verificar si la Contact Picker API está disponible (Chrome en Android principalmente)
+        if (navigator.contacts && window.ContactsManager) {
+          try {
+            const contactsManager = new window.ContactsManager()
+            const supported = await contactsManager.getProperties()
+            if (supported && supported.length > 0) {
+              setContactPickerAvailable(true)
+            }
+          } catch (err) {
+            // API no disponible o no soportada
+            console.log('Contact Picker API no disponible:', err)
+          }
+        }
       } catch (err) {
         console.error('Error al procesar parámetros de URL:', err)
         setError('Error al cargar los datos del torneo. Por favor, intenta nuevamente.')
@@ -71,6 +82,36 @@ function Register() {
 
     initialize()
   }, [searchParams])
+
+  const handleFillFromContacts = async () => {
+    try {
+      // Intentar usar Contact Picker API si está disponible (Chrome en Android)
+      if (navigator.contacts && window.ContactsManager) {
+        const contactsManager = new window.ContactsManager()
+        const contacts = await contactsManager.select(['name', 'email', 'tel'], { multiple: false })
+        
+        if (contacts && contacts.length > 0) {
+          const contact = contacts[0]
+          setFormData(prev => ({
+            ...prev,
+            fullName: contact.name?.[0] || prev.fullName,
+            email: contact.email?.[0] || prev.email,
+            phone: contact.tel?.[0] || prev.phone
+          }))
+          toast.success('Datos cargados desde contactos')
+        }
+      } else {
+        // Si no está disponible, sugerir usar el autocompletado del navegador
+        toast.info('Usa el autocompletado del navegador para llenar los campos automáticamente')
+      }
+    } catch (err) {
+      // El usuario canceló o hubo un error
+      if (err.name !== 'AbortError' && err.name !== 'NotSupportedError') {
+        console.error('Error al acceder a contactos:', err)
+        toast.error('No se pudieron cargar los contactos. Usa el autocompletado del navegador.')
+      }
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -192,6 +233,18 @@ function Register() {
         )}
 
         <form onSubmit={handleSubmit} className="register-form">
+          {/* Botón para llenar desde contactos (solo en móvil) */}
+          {contactPickerAvailable && (
+            <button
+              type="button"
+              onClick={handleFillFromContacts}
+              className="fill-from-contacts-btn"
+            >
+              <Contact size={18} />
+              Llenar desde mis contactos
+            </button>
+          )}
+
           <div className="form-group">
             <label>
               <User size={18} />
@@ -205,6 +258,7 @@ function Register() {
               placeholder="Tu nombre completo"
               required
               autoComplete="name"
+              autoFocus={typeof window !== 'undefined' && window.innerWidth > 768}
             />
           </div>
 
@@ -237,6 +291,7 @@ function Register() {
               placeholder="+54 9 11 1234-5678"
               required
               autoComplete="tel"
+              inputMode="tel"
             />
           </div>
 
