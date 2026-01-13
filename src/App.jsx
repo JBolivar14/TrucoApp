@@ -283,6 +283,22 @@ function App() {
             setMatches={setMatches}
             toast={toast}
             loadAllData={loadAllData}
+            onGenerateRegisterQR={(tournament) => {
+              setActiveTab('payments')
+              // Pasar el torneo al generador de QR de registro
+              setTimeout(() => {
+                const event = new CustomEvent('openRegisterQR', { detail: { tournament } })
+                window.dispatchEvent(event)
+              }, 100)
+            }}
+            onGeneratePaymentQR={(tournament) => {
+              setActiveTab('payments')
+              // Pasar el torneo al generador de QR de pago
+              setTimeout(() => {
+                const event = new CustomEvent('openPaymentQR', { detail: { tournament } })
+                window.dispatchEvent(event)
+              }, 100)
+            }}
           />
         )}
         {activeTab === 'matches' && (
@@ -532,10 +548,11 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
 }
 
 // Componente de Torneos
-function TournamentsTab({ tournaments, setTournaments, players, matches, setMatches, toast, loadAllData }) {
+function TournamentsTab({ tournaments, setTournaments, players, matches, setMatches, toast, loadAllData, onGenerateRegisterQR, onGeneratePaymentQR }) {
   const [showForm, setShowForm] = useState(false)
   const [editingTournament, setEditingTournament] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [showShareMenu, setShowShareMenu] = useState(null) // ID del torneo para mostrar menú
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [loading, setLoading] = useState(false)
@@ -842,6 +859,13 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
                     </span>
                   </div>
                   <div className="card-actions">
+                    <button 
+                      className="icon-btn" 
+                      onClick={() => setShowShareMenu(showShareMenu === tournament.id ? null : tournament.id)}
+                      title="Compartir torneo"
+                    >
+                      <Share2 size={16} />
+                    </button>
                     <button className="icon-btn" onClick={() => handleEdit(tournament)}>
                       <Edit2 size={16} />
                     </button>
@@ -916,6 +940,58 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
           })
         )}
       </div>
+
+      {/* Modal de Compartir Torneo */}
+      {showShareMenu && (
+        <div className="modal-overlay" onClick={() => setShowShareMenu(null)}>
+          <div className="modal share-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowShareMenu(null)}>
+              <X size={24} />
+            </button>
+            
+            <h3><Share2 size={24} /> Compartir Torneo</h3>
+            <p className="modal-subtitle">
+              {tournaments.find(t => t.id === showShareMenu)?.name}
+            </p>
+            
+            <div className="share-options">
+              <button 
+                className="share-option-btn"
+                onClick={() => {
+                  const tournament = tournaments.find(t => t.id === showShareMenu)
+                  if (tournament && onGenerateRegisterQR) {
+                    onGenerateRegisterQR(tournament)
+                    setShowShareMenu(null)
+                  }
+                }}
+              >
+                <QrCode size={32} />
+                <div>
+                  <h4>QR de Registro</h4>
+                  <p>Genera un código QR para que nuevos jugadores se registren e inscriban al torneo</p>
+                </div>
+              </button>
+              
+              <button 
+                className="share-option-btn"
+                onClick={() => {
+                  const tournament = tournaments.find(t => t.id === showShareMenu)
+                  if (tournament && onGeneratePaymentQR) {
+                    onGeneratePaymentQR(tournament)
+                    setShowShareMenu(null)
+                  }
+                }}
+              >
+                <DollarSign size={32} />
+                <div>
+                  <h4>QR de Pago</h4>
+                  <p>Genera un código QR para que jugadores ya registrados paguen la entrada</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1233,6 +1309,72 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
   const [registerQRFormData, setRegisterQRFormData] = useState({
     tournamentId: ''
   })
+
+  // Escuchar eventos para abrir QR desde torneos
+  useEffect(() => {
+    const handleOpenRegisterQR = (event) => {
+      const { tournament } = event.detail
+      if (tournament) {
+        setRegisterQRFormData({ tournamentId: tournament.id })
+        setShowRegisterQRGenerator(true)
+        setGeneratedRegisterQR(null)
+        
+        // Generar QR automáticamente
+        setTimeout(() => {
+          const baseUrl = window.location.origin
+          const params = new URLSearchParams({
+            tournamentId: tournament.id,
+            tournamentName: tournament.name || 'Torneo de Truco',
+            amount: tournament.entryFee?.toString() || '0'
+          })
+          const registerUrl = `${baseUrl}/registro?${params.toString()}`
+          
+          setGeneratedRegisterQR({
+            url: registerUrl,
+            tournamentName: tournament.name || 'Torneo de Truco',
+            tournamentId: tournament.id
+          })
+        }, 100)
+      }
+    }
+
+    const handleOpenPaymentQR = (event) => {
+      const { tournament } = event.detail
+      if (tournament) {
+        const ticketId = `TRU-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+        const baseUrl = window.location.origin
+        const params = new URLSearchParams({
+          tournament: tournament.name || 'Torneo de Truco',
+          amount: tournament.entryFee?.toString() || '0',
+          date: tournament.date || new Date().toISOString().split('T')[0],
+          organizer: ''
+        })
+        const paymentUrl = `${baseUrl}/pagar/${ticketId}?${params.toString()}`
+        
+        setQRFormData({
+          tournamentId: tournament.id,
+          amount: tournament.entryFee?.toString() || '',
+          organizerName: ''
+        })
+        setShowQRGenerator(true)
+        setGeneratedQR({
+          ticketId,
+          url: paymentUrl,
+          tournamentName: tournament.name || 'Torneo de Truco',
+          amount: parseFloat(tournament.entryFee || 0),
+          organizerName: ''
+        })
+      }
+    }
+
+    window.addEventListener('openRegisterQR', handleOpenRegisterQR)
+    window.addEventListener('openPaymentQR', handleOpenPaymentQR)
+
+    return () => {
+      window.removeEventListener('openRegisterQR', handleOpenRegisterQR)
+      window.removeEventListener('openPaymentQR', handleOpenPaymentQR)
+    }
+  }, [])
   const [formData, setFormData] = useState({
     type: 'entry',
     playerId: '',

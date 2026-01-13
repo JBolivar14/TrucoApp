@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Trophy, User, Mail, Phone, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react'
 import { signUpWithRole } from '../services/authService'
 import { useToast } from '../hooks/useToast'
+import { ToastContainer } from '../components/Toast'
 import './Register.css'
 
 function Register() {
@@ -21,24 +22,54 @@ function Register() {
   const [error, setError] = useState('')
   const [tournamentId, setTournamentId] = useState(null)
   const [tournamentName, setTournamentName] = useState('')
+  const [tournamentAmount, setTournamentAmount] = useState(null)
+  const [initializing, setInitializing] = useState(true)
 
   useEffect(() => {
-    // Obtener datos del QR/URL
-    const tId = searchParams.get('tournamentId')
-    const tName = searchParams.get('tournamentName')
-    
-    if (tId) setTournamentId(tId)
-    if (tName) setTournamentName(decodeURIComponent(tName))
+    const initialize = async () => {
+      try {
+        setInitializing(true)
+        setError('')
+        
+        // Obtener datos del QR/URL
+        const tId = searchParams.get('tournamentId')
+        const tName = searchParams.get('tournamentName')
+        const tAmount = searchParams.get('amount')
+        
+        if (tId) {
+          setTournamentId(tId)
+        }
+        
+        if (tName) {
+          try {
+            // Decodificar correctamente, manejando tanto %20 como +
+            const decodedName = decodeURIComponent(tName.replace(/\+/g, ' '))
+            setTournamentName(decodedName)
+          } catch (decodeErr) {
+            // Si falla decodeURIComponent, usar el valor original
+            setTournamentName(tName.replace(/\+/g, ' '))
+          }
+        }
 
-    // Intentar obtener datos del navegador si es móvil
-    if (navigator.userAgent.match(/Mobile|Android|iPhone|iPad/i)) {
-      // En móvil, intentar obtener datos del dispositivo si están disponibles
-      // Esto es limitado por privacidad del navegador, pero podemos intentar
-      if (navigator.contacts) {
-        // API de contactos no está disponible en navegadores web por privacidad
-        // Pero podemos sugerir al usuario que use autocompletado
+        if (tAmount) {
+          const amount = parseFloat(tAmount)
+          if (!isNaN(amount)) {
+            setTournamentAmount(amount)
+          }
+        }
+
+        // En móvil, los campos pueden usar autocompletado del navegador
+        // No hay API de contactos disponible por privacidad, pero el navegador
+        // puede sugerir datos guardados automáticamente
+      } catch (err) {
+        console.error('Error al procesar parámetros de URL:', err)
+        setError('Error al cargar los datos del torneo. Por favor, intenta nuevamente.')
+      } finally {
+        setInitializing(false)
       }
     }
+
+    initialize()
   }, [searchParams])
 
   const handleSubmit = async (e) => {
@@ -98,15 +129,17 @@ function Register() {
       if (tournamentId) {
         // Generar ticket ID para el pago
         const ticketId = `TRU-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
-        const paymentUrl = `/pagar/${ticketId}?tournament=${encodeURIComponent(tournamentName)}&tournamentId=${tournamentId}&playerId=${data.user?.id || ''}&playerName=${encodeURIComponent(formData.fullName)}&phone=${encodeURIComponent(formData.phone)}&email=${encodeURIComponent(formData.email)}`
+        const paymentUrl = `/pagar/${ticketId}?tournament=${encodeURIComponent(tournamentName || 'Torneo de Truco')}&tournamentId=${tournamentId}${tournamentAmount ? `&amount=${tournamentAmount}` : ''}&playerId=${data.user?.id || ''}&playerName=${encodeURIComponent(formData.fullName)}&phone=${encodeURIComponent(formData.phone)}&email=${encodeURIComponent(formData.email)}`
         
-        // Esperar un momento para que se cree el perfil
+        // Esperar un momento para que se cree el perfil en Supabase
         setTimeout(() => {
           navigate(paymentUrl)
-        }, 1000)
+        }, 1500)
       } else {
         // Si no hay torneo, redirigir al login
-        navigate('/login')
+        setTimeout(() => {
+          navigate('/login')
+        }, 1000)
       }
     } catch (err) {
       setError(err.message || 'Ocurrió un error inesperado')
@@ -120,6 +153,20 @@ function Register() {
       [e.target.name]: e.target.value
     })
     setError('')
+  }
+
+  // Mostrar estado de carga solo si hay parámetros en la URL
+  if (initializing && (searchParams.get('tournamentId') || searchParams.get('tournamentName'))) {
+    return (
+      <div className="register-page">
+        <div className="register-container">
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <p>Cargando información del torneo...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -248,6 +295,7 @@ function Register() {
           </p>
         </div>
       </div>
+      <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
     </div>
   )
 }
