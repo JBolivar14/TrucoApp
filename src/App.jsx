@@ -68,7 +68,9 @@ const transformPayment = (dbPayment) => ({
 const transformPaymentRecord = (dbRecord) => ({
   id: dbRecord.id,
   ticketId: dbRecord.ticket_id,
+  tournamentId: dbRecord.tournament_id || null,
   tournamentName: dbRecord.tournament_name,
+  playerId: dbRecord.player_id || null,
   amount: parseFloat(dbRecord.amount),
   playerName: dbRecord.player_name,
   teamName: dbRecord.team_name || '',
@@ -1620,9 +1622,19 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
   const handleConfirmQRRecord = async (record) => {
     try {
       setLoading(true)
-      // Convertir registro QR a pago registrado
-      const player = players.find(p => p.name === record.playerName || p.phone === record.phone)
-      let finalPlayerId = player ? player.id : null
+      // Determinar tournamentId: usar el del record si existe, sino buscar por nombre
+      let tournamentId = record.tournamentId
+      if (!tournamentId && record.tournamentName) {
+        const tournament = tournaments.find(t => t.name === record.tournamentName)
+        tournamentId = tournament?.id || null
+      }
+      
+      // Determinar playerId: usar el del record si existe, sino buscar por nombre/teléfono
+      let finalPlayerId = record.playerId
+      if (!finalPlayerId) {
+        const player = players.find(p => p.name === record.playerName || p.phone === record.phone)
+        finalPlayerId = player?.id || null
+      }
       
       // Si no existe el jugador, crearlo
       if (!finalPlayerId && record.playerName) {
@@ -1633,14 +1645,12 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
         })
         finalPlayerId = newPlayer.id
       }
-
-      const tournament = tournaments.find(t => t.name === record.tournamentName)
       
       // Crear pago desde registro QR
       await createPayment({
         type: 'entry',
         playerId: finalPlayerId,
-        tournamentId: tournament?.id || null,
+        tournamentId: tournamentId,
         amount: record.amount,
         date: record.date || new Date().toISOString().split('T')[0],
         status: 'completed',
@@ -1648,6 +1658,16 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
         source: 'qr',
         ticketId: record.ticketId
       })
+      
+      // Agregar jugador al torneo si hay tournamentId y playerId
+      if (tournamentId && finalPlayerId) {
+        try {
+          await addTournamentPlayer(tournamentId, finalPlayerId)
+        } catch (tournamentError) {
+          // Si el jugador ya está en el torneo, solo loguear el error
+          console.log('Jugador ya está en el torneo o error al agregar:', tournamentError)
+        }
+      }
       
       // Obtener usuario actual para asignar el registro
       const { data: { user } } = await supabase.auth.getUser()
@@ -1659,7 +1679,7 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
         user_id: user?.id || null
       })
       
-      toast.success('Registro confirmado y convertido a pago')
+      toast.success('Registro confirmado, pago creado y jugador agregado al torneo')
       await loadAllData()
       setSelectedRecord(null)
     } catch (error) {
