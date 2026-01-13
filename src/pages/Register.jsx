@@ -170,7 +170,9 @@ function Register() {
       if (tournamentId) {
         // Generar ticket ID para el pago
         const ticketId = `TRU-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
-        const paymentUrl = `/pagar/${ticketId}?tournament=${encodeURIComponent(tournamentName || 'Torneo de Truco')}&tournamentId=${tournamentId}${tournamentAmount ? `&amount=${tournamentAmount}` : ''}&playerId=${data.user?.id || ''}&playerName=${encodeURIComponent(formData.fullName)}&phone=${encodeURIComponent(formData.phone)}&email=${encodeURIComponent(formData.email)}`
+        // Asegurarse de que siempre se pase el amount (incluso si es 0)
+        const amount = tournamentAmount !== null && tournamentAmount !== undefined ? tournamentAmount : 0
+        const paymentUrl = `/pagar/${ticketId}?tournament=${encodeURIComponent(tournamentName || 'Torneo de Truco')}&tournamentId=${tournamentId}&amount=${amount}&playerId=${data.user?.id || ''}&playerName=${encodeURIComponent(formData.fullName)}&phone=${encodeURIComponent(formData.phone)}&email=${encodeURIComponent(formData.email)}`
         
         // Esperar un momento para que se cree el perfil en Supabase
         setTimeout(() => {

@@ -28,8 +28,8 @@ function PaymentForm() {
   useEffect(() => {
     // Decodificar datos del ticket desde URL params
     try {
-      const tournamentName = searchParams.get('tournament') || 'Torneo de Truco'
-      const amount = searchParams.get('amount') || '0'
+      const tournamentName = searchParams.get('tournament')
+      const amount = searchParams.get('amount')
       const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
       const organizerName = searchParams.get('organizer') || 'Organizador'
       const tId = searchParams.get('tournamentId')
@@ -44,10 +44,23 @@ function PaymentForm() {
       if (tId) setTournamentId(tId)
       if (pId) setPlayerId(pId)
       
+      // Decodificar el nombre del torneo si existe
+      let decodedTournamentName = 'Torneo de Truco'
+      if (tournamentName) {
+        try {
+          decodedTournamentName = decodeURIComponent(tournamentName.replace(/\+/g, ' '))
+        } catch (err) {
+          decodedTournamentName = tournamentName.replace(/\+/g, ' ')
+        }
+      }
+      
+      // Parsear el amount, asegurándose de que sea un número válido
+      const parsedAmount = amount ? parseFloat(amount) : 0
+      
       setTicketData({
         id: ticketId,
-        tournamentName: decodeURIComponent(tournamentName),
-        amount: parseFloat(amount),
+        tournamentName: decodedTournamentName,
+        amount: isNaN(parsedAmount) ? 0 : parsedAmount,
         date,
         organizerName: decodeURIComponent(organizerName)
       })
@@ -214,6 +227,9 @@ function PaymentForm() {
         <header className="payment-header">
           <Trophy className="payment-icon" />
           <h1>Inscripción al Torneo</h1>
+          {ticketData?.tournamentName && ticketData.tournamentName !== 'Torneo de Truco' && (
+            <p className="tournament-name-header">{ticketData.tournamentName}</p>
+          )}
           <p>Completa tus datos para registrarte</p>
         </header>
 
@@ -225,11 +241,11 @@ function PaymentForm() {
           <div className="ticket-details">
             <div className="ticket-row">
               <Trophy size={18} />
-              <span>{ticketData.tournamentName}</span>
+              <span className="ticket-tournament-name">{ticketData.tournamentName}</span>
             </div>
             <div className="ticket-row">
               <CreditCard size={18} />
-              <span className="ticket-amount">${ticketData.amount.toLocaleString('es-AR')}</span>
+              <span className="ticket-amount">${ticketData.amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
         </div>
