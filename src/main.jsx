@@ -4,6 +4,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import App from './App'
 import PaymentForm from './PaymentForm'
 import Login from './pages/Login'
+import Register from './pages/Register'
+import PlayerView from './pages/PlayerView'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import './index.css'
 
@@ -12,11 +14,20 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/registro" element={<Register />} />
         <Route
           path="/"
           element={
             <ProtectedRoute>
               <App />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/jugador"
+          element={
+            <ProtectedRoute>
+              <PlayerView />
             </ProtectedRoute>
           }
         />

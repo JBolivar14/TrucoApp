@@ -142,11 +142,12 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name)
+  INSERT INTO public.profiles (id, email, full_name, role)
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email)
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+    COALESCE((NEW.raw_user_meta_data->>'role')::text, 'player')
   );
   RETURN NEW;
 END;
@@ -329,13 +330,15 @@ CREATE POLICY "Users can delete own payments"
 -- ============================================
 -- Políticas para payment_records
 -- ============================================
+-- Los usuarios pueden ver sus propios registros y los registros públicos (sin user_id)
 CREATE POLICY "Users can view own payment records"
   ON payment_records FOR SELECT
-  USING (auth.uid() = user_id);
+  USING (auth.uid() = user_id OR user_id IS NULL);
 
+-- Permitir crear registros con o sin autenticación
 CREATE POLICY "Users can create own payment records"
   ON payment_records FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
 
 CREATE POLICY "Users can update own payment records"
   ON payment_records FOR UPDATE

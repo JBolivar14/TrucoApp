@@ -89,11 +89,17 @@ git push -u origin main
 
 Vercel detectará automáticamente que es un proyecto Vite:
 
-1. **Framework Preset**: Vite (debería detectarse automáticamente)
-2. **Root Directory**: `./` (dejar por defecto)
-3. **Build Command**: `npm run build` (debería estar por defecto)
-4. **Output Directory**: `dist` (debería estar por defecto)
-5. **Install Command**: `npm install` (debería estar por defecto)
+1. **Project Name**: ⚠️ **IMPORTANTE** - Cambia el nombre a minúsculas:
+   - ✅ `truco-tournament-app` (correcto)
+   - ❌ `Truco-Tournament-App` (incorrecto - mayúsculas no permitidas)
+   - ❌ `Torneo de TRUCO` (incorrecto - espacios y mayúsculas)
+   - El nombre debe ser en minúsculas, solo letras, números y guiones `-`, `_`, `.`
+   - **NO** puede contener la secuencia `---`
+2. **Framework Preset**: Vite (debería detectarse automáticamente)
+3. **Root Directory**: `./` (dejar por defecto)
+4. **Build Command**: `npm run build` (debería estar por defecto)
+5. **Output Directory**: `dist` (debería estar por defecto)
+6. **Install Command**: `npm install` (debería estar por defecto)
 
 ### Paso 8: Configurar Variables de Entorno
 

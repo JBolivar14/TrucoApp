@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { Trophy, CreditCard, CheckCircle, User, Users, MapPin, Send, AlertCircle } from 'lucide-react'
+import { createPaymentRecord } from './services/databaseService'
 import './PaymentForm.css'
 
 function PaymentForm() {
@@ -19,6 +20,7 @@ function PaymentForm() {
   })
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     // Decodificar datos del ticket desde URL params
@@ -28,6 +30,11 @@ function PaymentForm() {
       const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
       const organizerName = searchParams.get('organizer') || 'Organizador'
       
+      // Datos del jugador si vienen del registro
+      const playerName = searchParams.get('playerName')
+      const playerPhone = searchParams.get('phone')
+      const playerEmail = searchParams.get('email')
+      
       setTicketData({
         id: ticketId,
         tournamentName: decodeURIComponent(tournamentName),
@@ -35,28 +42,67 @@ function PaymentForm() {
         date,
         organizerName: decodeURIComponent(organizerName)
       })
+
+      // Pre-llenar datos del jugador si vienen del registro
+      if (playerName || playerPhone || playerEmail) {
+        setFormData(prev => ({
+          ...prev,
+          playerName: playerName ? decodeURIComponent(playerName) : prev.playerName,
+          phone: playerPhone ? decodeURIComponent(playerPhone) : prev.phone,
+          email: playerEmail ? decodeURIComponent(playerEmail) : prev.email
+        }))
+      }
     } catch (err) {
       setError('Error al cargar los datos del ticket')
     }
   }, [ticketId, searchParams])
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    setLoading(true)
+    setError(null)
     
-    // Guardar registro de pago en localStorage
-    const paymentRecords = JSON.parse(localStorage.getItem('trucoPaymentRecords') || '[]')
-    const newRecord = {
-      id: Date.now(),
-      ticketId,
-      ...ticketData,
-      ...formData,
-      submittedAt: new Date().toISOString(),
-      status: 'pending_confirmation'
+    try {
+      // Guardar registro de pago en Supabase
+      await createPaymentRecord({
+        ticketId,
+        tournamentName: ticketData.tournamentName,
+        amount: ticketData.amount,
+        playerName: formData.playerName,
+        teamName: formData.teamName || null,
+        balnearioNumber: formData.balnearioNumber || null,
+        phone: formData.phone || null,
+        email: formData.email || null,
+        paymentMethod: formData.paymentMethod || null,
+        notes: formData.notes || null,
+        status: 'pending_confirmation'
+      })
+      
+      setSubmitted(true)
+    } catch (err) {
+      console.error('Error al guardar registro:', err)
+      setError('Error al enviar el formulario. Por favor, intenta nuevamente.')
+      // Fallback a localStorage si Supabase falla
+      try {
+        const paymentRecords = JSON.parse(localStorage.getItem('trucoPaymentRecords') || '[]')
+        const newRecord = {
+          id: Date.now(),
+          ticketId,
+          ...ticketData,
+          ...formData,
+          submittedAt: new Date().toISOString(),
+          status: 'pending_confirmation'
+        }
+        paymentRecords.push(newRecord)
+        localStorage.setItem('trucoPaymentRecords', JSON.stringify(paymentRecords))
+        setSubmitted(true)
+        setError(null)
+      } catch (localErr) {
+        setError('Error al guardar el registro. Por favor, contacta al organizador.')
+      }
+    } finally {
+      setLoading(false)
     }
-    paymentRecords.push(newRecord)
-    localStorage.setItem('trucoPaymentRecords', JSON.stringify(paymentRecords))
-    
-    setSubmitted(true)
   }
 
   const paymentMethods = [
@@ -177,6 +223,21 @@ function PaymentForm() {
           </div>
         </div>
 
+        {error && (
+          <div className="error-message" style={{
+            background: '#fee',
+            color: '#c33',
+            padding: '1rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <AlertCircle size={20} />
+            <span>{error}</span>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="registration-form">
           <div className="form-section">
             <h3><User size={20} /> Información Personal</h3>
@@ -285,9 +346,9 @@ function PaymentForm() {
             </div>
           </div>
 
-          <button type="submit" className="submit-btn">
+          <button type="submit" className="submit-btn" disabled={loading}>
             <Send size={20} />
-            Enviar Inscripción
+            {loading ? 'Enviando...' : 'Enviar Inscripción'}
           </button>
 
           <p className="form-disclaimer">

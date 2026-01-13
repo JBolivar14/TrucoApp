@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Trophy, Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react'
-import { signIn, signUp, getCurrentUser } from '../services/authService'
+import { signIn, signUp, signUpWithRole, getCurrentUser } from '../services/authService'
 import { useToast } from '../hooks/useToast'
 import './Login.css'
 
@@ -76,10 +76,13 @@ function Login() {
           return
         }
 
-        const { data, error: signUpError } = await signUp(
+        // Registrar como jugador por defecto
+        // Los administradores se asignan manualmente desde la cuenta maestra
+        const { data, error: signUpError } = await signUpWithRole(
           formData.email,
           formData.password,
-          formData.fullName
+          formData.fullName,
+          'player'
         )
 
         if (signUpError) {

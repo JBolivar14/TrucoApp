@@ -157,3 +157,66 @@ export async function resetPassword(email) {
 export function onAuthStateChange(callback) {
   return supabase.auth.onAuthStateChange(callback)
 }
+
+/**
+ * Verifica si el usuario actual es administrador
+ * @returns {Promise<boolean>}
+ */
+export async function isAdmin() {
+  try {
+    const { profile } = await getCurrentProfile()
+    return profile?.role === 'admin'
+  } catch (error) {
+    return false
+  }
+}
+
+/**
+ * Obtiene el rol del usuario actual
+ * @returns {Promise<string|null>}
+ */
+export async function getUserRole() {
+  try {
+    const { profile } = await getCurrentProfile()
+    return profile?.role || 'player'
+  } catch (error) {
+    return null
+  }
+}
+
+/**
+ * Registra un nuevo usuario con rol específico
+ * @param {string} email - Email del usuario
+ * @param {string} password - Contraseña
+ * @param {string} fullName - Nombre completo
+ * @param {string} role - Rol del usuario ('admin' o 'player')
+ * @returns {Promise<Object>}
+ */
+export async function signUpWithRole(email, password, fullName = '', role = 'player') {
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          role: role
+        }
+      }
+    })
+
+    if (error) throw error
+
+    // Actualizar el perfil con el rol después de crear el usuario
+    if (data.user) {
+      await supabase
+        .from('profiles')
+        .update({ role: role })
+        .eq('id', data.user.id)
+    }
+
+    return { data, error: null }
+  } catch (error) {
+    return { data: null, error }
+  }
+}

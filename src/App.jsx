@@ -1,11 +1,88 @@
 import { useState, useEffect } from 'react'
-import { Trophy, Users, DollarSign, Calendar, Plus, Edit2, Trash2, CheckCircle, XCircle, QrCode, Download, X, Share2, Printer, BarChart3, FileDown, FileUp, Search } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Trophy, Users, DollarSign, Calendar, Plus, Edit2, Trash2, CheckCircle, XCircle, QrCode, Download, X, Share2, Printer, BarChart3, FileDown, FileUp, Search, LogOut, User } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { ToastContainer } from './components/Toast'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { useToast } from './hooks/useToast'
 import { exportToCSV, exportToJSON, exportAllData, importFromJSON } from './utils/exportData'
+import {
+  getPlayers, createPlayer, updatePlayer, deletePlayer,
+  getTournamentsWithPlayers, createTournament, updateTournament, deleteTournament,
+  addTournamentPlayer, removeTournamentPlayer,
+  getMatches, createMatch, updateMatch, deleteMatch,
+  getPayments, createPayment, updatePayment, deletePayment,
+  getPaymentRecords, createPaymentRecord, updatePaymentRecord,
+  getAllProfiles, updateUserRole
+} from './services/databaseService'
+import { supabase } from './lib/supabase'
+import { getCurrentProfile, signOut } from './services/authService'
+import { useNavigate } from 'react-router-dom'
 import './App.css'
+
+// Funciones helper para transformar datos de Supabase al formato de la UI
+const transformPlayer = (dbPlayer) => ({
+  id: dbPlayer.id,
+  name: dbPlayer.name,
+  phone: dbPlayer.phone || '',
+  email: dbPlayer.email || '',
+  registeredAt: dbPlayer.registered_at || dbPlayer.created_at
+})
+
+const transformTournament = (dbTournament) => ({
+  id: dbTournament.id,
+  name: dbTournament.name,
+  entryFee: parseFloat(dbTournament.entry_fee),
+  prizePool: parseFloat(dbTournament.prize_pool),
+  date: dbTournament.date,
+  status: dbTournament.status,
+  createdAt: dbTournament.created_at,
+  participants: dbTournament.participants || []
+})
+
+const transformMatch = (dbMatch) => ({
+  id: dbMatch.id,
+  tournamentId: dbMatch.tournament_id,
+  player1Id: dbMatch.player1_id,
+  player2Id: dbMatch.player2_id,
+  player1Score: dbMatch.player1_score,
+  player2Score: dbMatch.player2_score,
+  date: dbMatch.date,
+  status: dbMatch.status,
+  createdAt: dbMatch.created_at
+})
+
+const transformPayment = (dbPayment) => ({
+  id: dbPayment.id,
+  type: dbPayment.type,
+  playerId: dbPayment.player_id,
+  tournamentId: dbPayment.tournament_id,
+  amount: parseFloat(dbPayment.amount),
+  date: dbPayment.date,
+  status: dbPayment.status,
+  notes: dbPayment.notes || '',
+  createdAt: dbPayment.created_at,
+  source: dbPayment.source,
+  ticketId: dbPayment.ticket_id
+})
+
+const transformPaymentRecord = (dbRecord) => ({
+  id: dbRecord.id,
+  ticketId: dbRecord.ticket_id,
+  tournamentName: dbRecord.tournament_name,
+  amount: parseFloat(dbRecord.amount),
+  playerName: dbRecord.player_name,
+  teamName: dbRecord.team_name || '',
+  balnearioNumber: dbRecord.balneario_number || '',
+  phone: dbRecord.phone || '',
+  email: dbRecord.email || '',
+  paymentMethod: dbRecord.payment_method || '',
+  notes: dbRecord.notes || '',
+  status: dbRecord.status,
+  submittedAt: dbRecord.submitted_at,
+  confirmedAt: dbRecord.confirmed_at,
+  rejectedAt: dbRecord.rejected_at
+})
 
 function App() {
   const [activeTab, setActiveTab] = useState('players')
@@ -14,43 +91,96 @@ function App() {
   const [payments, setPayments] = useState([])
   const [matches, setMatches] = useState([])
   const [paymentRecords, setPaymentRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [userRole, setUserRole] = useState(null)
+  const [userProfile, setUserProfile] = useState(null)
   const toast = useToast()
+  const navigate = useNavigate()
 
-  // Cargar datos del localStorage al iniciar
+  // Cargar datos desde Supabase al iniciar
   useEffect(() => {
-    const savedPlayers = localStorage.getItem('trucoPlayers')
-    const savedTournaments = localStorage.getItem('trucoTournaments')
-    const savedPayments = localStorage.getItem('trucoPayments')
-    const savedMatches = localStorage.getItem('trucoMatches')
-    const savedPaymentRecords = localStorage.getItem('trucoPaymentRecords')
-
-    if (savedPlayers) setPlayers(JSON.parse(savedPlayers))
-    if (savedTournaments) setTournaments(JSON.parse(savedTournaments))
-    if (savedPayments) setPayments(JSON.parse(savedPayments))
-    if (savedMatches) setMatches(JSON.parse(savedMatches))
-    if (savedPaymentRecords) setPaymentRecords(JSON.parse(savedPaymentRecords))
+    checkUserRole()
+    loadAllData()
   }, [])
 
-  // Guardar datos en localStorage cuando cambien
-  useEffect(() => {
-    localStorage.setItem('trucoPlayers', JSON.stringify(players))
-  }, [players])
+  const checkUserRole = async () => {
+    try {
+      const { profile } = await getCurrentProfile()
+      setUserProfile(profile)
+      const role = profile?.role || 'player'
+      setUserRole(role)
+      
+      // Si es jugador y está en la ruta principal, redirigir a la vista de jugador
+      if (role === 'player' && window.location.pathname === '/') {
+        navigate('/jugador')
+      }
+    } catch (error) {
+      console.error('Error al verificar rol:', error)
+    }
+  }
 
-  useEffect(() => {
-    localStorage.setItem('trucoTournaments', JSON.stringify(tournaments))
-  }, [tournaments])
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+      navigate('/login')
+    } catch (error) {
+      toast.error('Error al cerrar sesión')
+    }
+  }
 
-  useEffect(() => {
-    localStorage.setItem('trucoPayments', JSON.stringify(payments))
-  }, [payments])
+  const loadAllData = async () => {
+    try {
+      setLoading(true)
+      
+      // Cargar todos los datos en paralelo
+      const [playersData, tournamentsData, matchesData, paymentsData, recordsData] = await Promise.all([
+        getPlayers().catch(err => { toast.error('Error al cargar jugadores'); return [] }),
+        getTournamentsWithPlayers().catch(err => { toast.error('Error al cargar torneos'); return [] }),
+        getMatches().catch(err => { toast.error('Error al cargar partidas'); return [] }),
+        getPayments().catch(err => { toast.error('Error al cargar pagos'); return [] }),
+        getPaymentRecords().catch(err => { toast.error('Error al cargar registros QR'); return [] })
+      ])
 
-  useEffect(() => {
-    localStorage.setItem('trucoMatches', JSON.stringify(matches))
-  }, [matches])
+      // Transformar datos al formato de la UI
+      setPlayers(playersData.map(transformPlayer))
+      setTournaments(tournamentsData.map(transformTournament))
+      setMatches(matchesData.map(transformMatch))
+      setPayments(paymentsData.map(transformPayment))
+      setPaymentRecords(recordsData.map(transformPaymentRecord))
+    } catch (error) {
+      console.error('Error al cargar datos:', error)
+      toast.error('Error al cargar los datos')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  useEffect(() => {
-    localStorage.setItem('trucoPaymentRecords', JSON.stringify(paymentRecords))
-  }, [paymentRecords])
+  if (loading) {
+    return (
+      <div className="app">
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+        }}>
+          <div style={{ textAlign: 'center', color: 'white' }}>
+            <div style={{
+              width: '50px',
+              height: '50px',
+              border: '4px solid rgba(255, 255, 255, 0.3)',
+              borderTopColor: 'white',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              margin: '0 auto 1rem'
+            }}></div>
+            <p>Cargando datos...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="app">
@@ -59,6 +189,17 @@ function App() {
           <Trophy className="header-icon" />
           <h1>Torneo de Truco</h1>
           <p>Gestión de Torneos y Pagos</p>
+        </div>
+        <div className="header-actions">
+          <div className="user-info">
+            <User size={20} />
+            <span>{userProfile?.full_name || userProfile?.email || 'Administrador'}</span>
+            <span className="role-badge">{userRole === 'admin' ? 'Admin' : 'Jugador'}</span>
+          </div>
+          <button className="btn-logout" onClick={handleSignOut}>
+            <LogOut size={20} />
+            Salir
+          </button>
         </div>
       </header>
 
@@ -98,6 +239,15 @@ function App() {
           <DollarSign size={20} />
           Pagos
         </button>
+        {userRole === 'admin' && (
+          <button
+            className={activeTab === 'users' ? 'active' : ''}
+            onClick={() => setActiveTab('users')}
+          >
+            <User size={20} />
+            Usuarios
+          </button>
+        )}
       </nav>
 
       <main className="app-main">
@@ -123,7 +273,7 @@ function App() {
           />
         )}
         {activeTab === 'players' && (
-          <PlayersTab players={players} setPlayers={setPlayers} toast={toast} />
+          <PlayersTab players={players} setPlayers={setPlayers} toast={toast} loadAllData={loadAllData} />
         )}
         {activeTab === 'tournaments' && (
           <TournamentsTab
@@ -133,6 +283,7 @@ function App() {
             matches={matches}
             setMatches={setMatches}
             toast={toast}
+            loadAllData={loadAllData}
           />
         )}
         {activeTab === 'matches' && (
@@ -142,6 +293,7 @@ function App() {
             players={players}
             tournaments={tournaments}
             toast={toast}
+            loadAllData={loadAllData}
           />
         )}
         {activeTab === 'payments' && (
@@ -153,7 +305,11 @@ function App() {
             paymentRecords={paymentRecords}
             setPaymentRecords={setPaymentRecords}
             toast={toast}
+            loadAllData={loadAllData}
           />
+        )}
+        {activeTab === 'users' && userRole === 'admin' && (
+          <UsersManagementTab toast={toast} loadAllData={loadAllData} />
         )}
       </main>
       
@@ -163,12 +319,13 @@ function App() {
 }
 
 // Componente de Jugadores
-function PlayersTab({ players, setPlayers, toast }) {
+function PlayersTab({ players, setPlayers, toast, loadAllData }) {
   const [showForm, setShowForm] = useState(false)
   const [editingPlayer, setEditingPlayer] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({ name: '', phone: '', email: '' })
+  const [loading, setLoading] = useState(false)
 
   const filteredPlayers = players.filter(player =>
     player.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -176,7 +333,7 @@ function PlayersTab({ players, setPlayers, toast }) {
     (player.email && player.email.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     
     // Validaciones
@@ -190,29 +347,43 @@ function PlayersTab({ players, setPlayers, toast }) {
       return
     }
 
-    if (editingPlayer) {
-      setPlayers(players.map(p => p.id === editingPlayer.id ? { ...p, ...formData } : p))
-      setEditingPlayer(null)
-      toast.success('Jugador actualizado correctamente')
-    } else {
-      // Verificar si ya existe un jugador con el mismo nombre
-      if (players.some(p => p.name.toLowerCase() === formData.name.toLowerCase())) {
-        if (!window.confirm('Ya existe un jugador con ese nombre. ¿Deseas agregarlo de todas formas?')) {
-          return
+    setLoading(true)
+    try {
+      if (editingPlayer) {
+        // Actualizar jugador
+        await updatePlayer(editingPlayer.id, {
+          name: formData.name.trim(),
+          phone: formData.phone || null,
+          email: formData.email || null
+        })
+        toast.success('Jugador actualizado correctamente')
+        await loadAllData()
+      } else {
+        // Verificar si ya existe un jugador con el mismo nombre
+        if (players.some(p => p.name.toLowerCase() === formData.name.toLowerCase())) {
+          if (!window.confirm('Ya existe un jugador con ese nombre. ¿Deseas agregarlo de todas formas?')) {
+            setLoading(false)
+            return
+          }
         }
-      }
 
-      const newPlayer = {
-        id: Date.now(),
-        ...formData,
-        name: formData.name.trim(),
-        registeredAt: new Date().toISOString()
+        // Crear nuevo jugador
+        await createPlayer({
+          name: formData.name.trim(),
+          phone: formData.phone || '',
+          email: formData.email || ''
+        })
+        toast.success('Jugador agregado correctamente')
+        await loadAllData()
       }
-      setPlayers([...players, newPlayer])
-      toast.success('Jugador agregado correctamente')
+      setFormData({ name: '', phone: '', email: '' })
+      setShowForm(false)
+    } catch (error) {
+      console.error('Error al guardar jugador:', error)
+      toast.error(error.message || 'Error al guardar el jugador')
+    } finally {
+      setLoading(false)
     }
-    setFormData({ name: '', phone: '', email: '' })
-    setShowForm(false)
   }
 
   const handleEdit = (player) => {
@@ -225,11 +396,20 @@ function PlayersTab({ players, setPlayers, toast }) {
     setConfirmDelete(id)
   }
 
-  const confirmDeleteAction = () => {
+  const confirmDeleteAction = async () => {
     if (confirmDelete) {
-      setPlayers(players.filter(p => p.id !== confirmDelete))
-      toast.success('Jugador eliminado correctamente')
-      setConfirmDelete(null)
+      try {
+        setLoading(true)
+        await deletePlayer(confirmDelete)
+        toast.success('Jugador eliminado correctamente')
+        await loadAllData()
+        setConfirmDelete(null)
+      } catch (error) {
+        console.error('Error al eliminar jugador:', error)
+        toast.error(error.message || 'Error al eliminar el jugador')
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
@@ -306,10 +486,10 @@ function PlayersTab({ players, setPlayers, toast }) {
                 />
               </div>
               <div className="form-actions">
-                <button type="submit" className="btn-primary">
-                  {editingPlayer ? 'Actualizar' : 'Agregar'}
+                <button type="submit" className="btn-primary" disabled={loading}>
+                  {loading ? 'Guardando...' : (editingPlayer ? 'Actualizar' : 'Agregar')}
                 </button>
-                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingPlayer(null) }}>
+                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingPlayer(null) }} disabled={loading}>
                   Cancelar
                 </button>
               </div>
@@ -353,12 +533,13 @@ function PlayersTab({ players, setPlayers, toast }) {
 }
 
 // Componente de Torneos
-function TournamentsTab({ tournaments, setTournaments, players, matches, setMatches, toast }) {
+function TournamentsTab({ tournaments, setTournaments, players, matches, setMatches, toast, loadAllData }) {
   const [showForm, setShowForm] = useState(false)
   const [editingTournament, setEditingTournament] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     entryFee: '',
@@ -367,7 +548,7 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
     status: 'planned'
   })
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     
     // Validaciones
@@ -395,25 +576,37 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
       }
     }
 
-    if (editingTournament) {
-      setTournaments(tournaments.map(t => t.id === editingTournament.id ? { ...t, ...formData, entryFee, prizePool } : t))
-      setEditingTournament(null)
-      toast.success('Torneo actualizado correctamente')
-    } else {
-      const newTournament = {
-        id: Date.now(),
-        ...formData,
-        name: formData.name.trim(),
-        entryFee,
-        prizePool,
-        createdAt: new Date().toISOString(),
-        participants: []
+    setLoading(true)
+    try {
+      if (editingTournament) {
+        await updateTournament(editingTournament.id, {
+          name: formData.name.trim(),
+          entry_fee: entryFee,
+          prize_pool: prizePool,
+          date: formData.date,
+          status: formData.status
+        })
+        toast.success('Torneo actualizado correctamente')
+        await loadAllData()
+      } else {
+        await createTournament({
+          name: formData.name.trim(),
+          entryFee,
+          prizePool,
+          date: formData.date,
+          status: formData.status
+        })
+        toast.success('Torneo creado correctamente')
+        await loadAllData()
       }
-      setTournaments([...tournaments, newTournament])
-      toast.success('Torneo creado correctamente')
+      setFormData({ name: '', entryFee: '', prizePool: '', date: new Date().toISOString().split('T')[0], status: 'planned' })
+      setShowForm(false)
+    } catch (error) {
+      console.error('Error al guardar torneo:', error)
+      toast.error(error.message || 'Error al guardar el torneo')
+    } finally {
+      setLoading(false)
     }
-    setFormData({ name: '', entryFee: '', prizePool: '', date: new Date().toISOString().split('T')[0], status: 'planned' })
-    setShowForm(false)
   }
 
   const handleEdit = (tournament) => {
@@ -432,32 +625,42 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
     setConfirmDelete(id)
   }
 
-  const confirmDeleteAction = () => {
+  const confirmDeleteAction = async () => {
     if (confirmDelete) {
-      setTournaments(tournaments.filter(t => t.id !== confirmDelete))
-      setMatches(matches.filter(m => m.tournamentId !== confirmDelete))
-      toast.success('Torneo eliminado correctamente')
-      setConfirmDelete(null)
+      try {
+        setLoading(true)
+        await deleteTournament(confirmDelete)
+        toast.success('Torneo eliminado correctamente')
+        await loadAllData()
+        setConfirmDelete(null)
+      } catch (error) {
+        console.error('Error al eliminar torneo:', error)
+        toast.error(error.message || 'Error al eliminar el torneo')
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
-  const addParticipant = (tournamentId, playerId) => {
-    setTournaments(tournaments.map(t => {
-      if (t.id === tournamentId && !t.participants.includes(playerId)) {
-        toast.success('Participante agregado al torneo')
-        return { ...t, participants: [...t.participants, playerId] }
-      }
-      return t
-    }))
+  const addParticipant = async (tournamentId, playerId) => {
+    try {
+      await addTournamentPlayer(tournamentId, playerId)
+      toast.success('Participante agregado al torneo')
+      await loadAllData()
+    } catch (error) {
+      console.error('Error al agregar participante:', error)
+      toast.error(error.message || 'Error al agregar participante')
+    }
   }
 
-  const removeParticipant = (tournamentId, playerId) => {
-    setTournaments(tournaments.map(t => {
-      if (t.id === tournamentId) {
-        return { ...t, participants: t.participants.filter(p => p !== playerId) }
-      }
-      return t
-    }))
+  const removeParticipant = async (tournamentId, playerId) => {
+    try {
+      await removeTournamentPlayer(tournamentId, playerId)
+      await loadAllData()
+    } catch (error) {
+      console.error('Error al remover participante:', error)
+      toast.error(error.message || 'Error al remover participante')
+    }
   }
 
   const getTournamentStats = (tournament) => {
@@ -604,10 +807,10 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
                 </div>
               </div>
               <div className="form-actions">
-                <button type="submit" className="btn-primary">
-                  {editingTournament ? 'Actualizar' : 'Crear'}
+                <button type="submit" className="btn-primary" disabled={loading}>
+                  {loading ? 'Guardando...' : (editingTournament ? 'Actualizar' : 'Crear')}
                 </button>
-                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingTournament(null) }}>
+                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingTournament(null) }} disabled={loading}>
                   Cancelar
                 </button>
               </div>
@@ -719,10 +922,11 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
 }
 
 // Componente de Partidas
-function MatchesTab({ matches, setMatches, players, tournaments, toast }) {
+function MatchesTab({ matches, setMatches, players, tournaments, toast, loadAllData }) {
   const [showForm, setShowForm] = useState(false)
   const [editingMatch, setEditingMatch] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     tournamentId: '',
     player1Id: '',
@@ -733,43 +937,51 @@ function MatchesTab({ matches, setMatches, players, tournaments, toast }) {
     status: 'scheduled'
   })
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (editingMatch) {
-      setMatches(matches.map(m => m.id === editingMatch.id ? {
-        ...m,
-        ...formData,
-        player1Id: parseInt(formData.player1Id),
-        player2Id: parseInt(formData.player2Id),
-        player1Score: formData.player1Score ? parseInt(formData.player1Score) : null,
-        player2Score: formData.player2Score ? parseInt(formData.player2Score) : null,
-        tournamentId: parseInt(formData.tournamentId)
-      } : m))
-      setEditingMatch(null)
-    } else {
-      const newMatch = {
-        id: Date.now(),
-        tournamentId: parseInt(formData.tournamentId),
-        player1Id: parseInt(formData.player1Id),
-        player2Id: parseInt(formData.player2Id),
-        player1Score: formData.player1Score ? parseInt(formData.player1Score) : null,
-        player2Score: formData.player2Score ? parseInt(formData.player2Score) : null,
-        date: formData.date,
-        status: formData.status,
-        createdAt: new Date().toISOString()
+    setLoading(true)
+    try {
+      if (editingMatch) {
+        await updateMatch(editingMatch.id, {
+          tournament_id: formData.tournamentId,
+          player1_id: formData.player1Id,
+          player2_id: formData.player2Id,
+          player1_score: formData.player1Score ? parseInt(formData.player1Score) : null,
+          player2_score: formData.player2Score ? parseInt(formData.player2Score) : null,
+          date: formData.date,
+          status: formData.status
+        })
+        toast.success('Partida actualizada correctamente')
+        await loadAllData()
+      } else {
+        await createMatch({
+          tournamentId: formData.tournamentId,
+          player1Id: formData.player1Id,
+          player2Id: formData.player2Id,
+          player1Score: formData.player1Score ? parseInt(formData.player1Score) : null,
+          player2Score: formData.player2Score ? parseInt(formData.player2Score) : null,
+          date: formData.date,
+          status: formData.status
+        })
+        toast.success('Partida creada correctamente')
+        await loadAllData()
       }
-      setMatches([...matches, newMatch])
+      setFormData({
+        tournamentId: '',
+        player1Id: '',
+        player2Id: '',
+        player1Score: '',
+        player2Score: '',
+        date: new Date().toISOString().split('T')[0],
+        status: 'scheduled'
+      })
+      setShowForm(false)
+    } catch (error) {
+      console.error('Error al guardar partida:', error)
+      toast.error(error.message || 'Error al guardar la partida')
+    } finally {
+      setLoading(false)
     }
-    setFormData({
-      tournamentId: '',
-      player1Id: '',
-      player2Id: '',
-      player1Score: '',
-      player2Score: '',
-      date: new Date().toISOString().split('T')[0],
-      status: 'scheduled'
-    })
-    setShowForm(false)
   }
 
   const handleEdit = (match) => {
@@ -790,11 +1002,20 @@ function MatchesTab({ matches, setMatches, players, tournaments, toast }) {
     setConfirmDelete(id)
   }
 
-  const confirmDeleteAction = () => {
+  const confirmDeleteAction = async () => {
     if (confirmDelete) {
-      setMatches(matches.filter(m => m.id !== confirmDelete))
-      toast.success('Partida eliminada correctamente')
-      setConfirmDelete(null)
+      try {
+        setLoading(true)
+        await deleteMatch(confirmDelete)
+        toast.success('Partida eliminada correctamente')
+        await loadAllData()
+        setConfirmDelete(null)
+      } catch (error) {
+        console.error('Error al eliminar partida:', error)
+        toast.error(error.message || 'Error al eliminar la partida')
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
@@ -918,10 +1139,10 @@ function MatchesTab({ matches, setMatches, players, tournaments, toast }) {
                 </div>
               </div>
               <div className="form-actions">
-                <button type="submit" className="btn-primary">
-                  {editingMatch ? 'Actualizar' : 'Crear'}
+                <button type="submit" className="btn-primary" disabled={loading}>
+                  {loading ? 'Guardando...' : (editingMatch ? 'Actualizar' : 'Crear')}
                 </button>
-                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingMatch(null) }}>
+                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingMatch(null) }} disabled={loading}>
                   Cancelar
                 </button>
               </div>
@@ -994,18 +1215,24 @@ function MatchesTab({ matches, setMatches, players, tournaments, toast }) {
 }
 
 // Componente de Pagos
-function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecords, setPaymentRecords, toast }) {
+function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecords, setPaymentRecords, toast, loadAllData }) {
   const [showForm, setShowForm] = useState(false)
   const [editingPayment, setEditingPayment] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [showQRGenerator, setShowQRGenerator] = useState(false)
+  const [showRegisterQRGenerator, setShowRegisterQRGenerator] = useState(false)
   const [generatedQR, setGeneratedQR] = useState(null)
+  const [generatedRegisterQR, setGeneratedRegisterQR] = useState(null)
   const [showQRRecords, setShowQRRecords] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState(null)
+  const [loading, setLoading] = useState(false)
   const [qrFormData, setQRFormData] = useState({
     tournamentId: '',
     amount: '',
     organizerName: ''
+  })
+  const [registerQRFormData, setRegisterQRFormData] = useState({
+    tournamentId: ''
   })
   const [formData, setFormData] = useState({
     type: 'entry',
@@ -1017,48 +1244,58 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
     notes: ''
   })
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (editingPayment) {
-      setPayments(payments.map(p => p.id === editingPayment.id ? {
-        ...p,
-        ...formData,
-        playerId: parseInt(formData.playerId),
-        tournamentId: formData.tournamentId ? parseInt(formData.tournamentId) : null,
-        amount: parseFloat(formData.amount)
-      } : p))
-      setEditingPayment(null)
-    } else {
-      const newPayment = {
-        id: Date.now(),
-        type: formData.type,
-        playerId: parseInt(formData.playerId),
-        tournamentId: formData.tournamentId ? parseInt(formData.tournamentId) : null,
-        amount: parseFloat(formData.amount),
-        date: formData.date,
-        status: formData.status,
-        notes: formData.notes,
-        createdAt: new Date().toISOString()
+    setLoading(true)
+    try {
+      if (editingPayment) {
+        await updatePayment(editingPayment.id, {
+          type: formData.type,
+          player_id: formData.playerId || null,
+          tournament_id: formData.tournamentId || null,
+          amount: parseFloat(formData.amount),
+          date: formData.date,
+          status: formData.status,
+          notes: formData.notes || null
+        })
+        toast.success('Pago actualizado correctamente')
+        await loadAllData()
+      } else {
+        await createPayment({
+          type: formData.type,
+          playerId: formData.playerId || null,
+          tournamentId: formData.tournamentId || null,
+          amount: parseFloat(formData.amount),
+          date: formData.date,
+          status: formData.status,
+          notes: formData.notes || ''
+        })
+        toast.success('Pago registrado correctamente')
+        await loadAllData()
       }
-      setPayments([...payments, newPayment])
+      setFormData({
+        type: 'entry',
+        playerId: '',
+        tournamentId: '',
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
+        status: 'pending',
+        notes: ''
+      })
+      setShowForm(false)
+    } catch (error) {
+      console.error('Error al guardar pago:', error)
+      toast.error(error.message || 'Error al guardar el pago')
+    } finally {
+      setLoading(false)
     }
-    setFormData({
-      type: 'entry',
-      playerId: '',
-      tournamentId: '',
-      amount: '',
-      date: new Date().toISOString().split('T')[0],
-      status: 'pending',
-      notes: ''
-    })
-    setShowForm(false)
   }
 
   const handleEdit = (payment) => {
     setEditingPayment(payment)
     setFormData({
       type: payment.type,
-      playerId: payment.playerId.toString(),
+      playerId: payment.playerId?.toString() || '',
       tournamentId: payment.tournamentId?.toString() || '',
       amount: payment.amount.toString(),
       date: payment.date,
@@ -1072,11 +1309,20 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
     setConfirmDelete(id)
   }
 
-  const confirmDeleteAction = () => {
+  const confirmDeleteAction = async () => {
     if (confirmDelete) {
-      setPayments(payments.filter(p => p.id !== confirmDelete))
-      toast.success('Pago eliminado correctamente')
-      setConfirmDelete(null)
+      try {
+        setLoading(true)
+        await deletePayment(confirmDelete)
+        toast.success('Pago eliminado correctamente')
+        await loadAllData()
+        setConfirmDelete(null)
+      } catch (error) {
+        console.error('Error al eliminar pago:', error)
+        toast.error(error.message || 'Error al eliminar el pago')
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
@@ -1183,58 +1429,122 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
     toast.success('Link copiado al portapapeles')
   }
 
-  const handleConfirmQRRecord = (record) => {
-    // Convertir registro QR a pago registrado
-    const player = players.find(p => p.name === record.playerName || p.phone === record.phone)
-    const playerId = player ? player.id : null
+  const generateRegisterQR = (e) => {
+    e.preventDefault()
+    const tournament = tournaments.find(t => t.id === parseInt(registerQRFormData.tournamentId))
     
-    // Si no existe el jugador, crearlo
-    let finalPlayerId = playerId
-    if (!playerId && record.playerName) {
-      const newPlayer = {
-        id: Date.now(),
-        name: record.playerName,
-        phone: record.phone || '',
-        email: record.email || '',
-        registeredAt: new Date().toISOString()
-      }
-      setPlayers([...players, newPlayer])
-      finalPlayerId = newPlayer.id
-    }
-
-    const tournament = tournaments.find(t => t.name === record.tournamentName)
+    const baseUrl = window.location.origin
+    const params = new URLSearchParams({
+      tournamentId: registerQRFormData.tournamentId,
+      tournamentName: tournament?.name || 'Torneo de Truco'
+    })
     
-    const newPayment = {
-      id: Date.now(),
-      type: 'entry',
-      playerId: finalPlayerId,
-      tournamentId: tournament?.id || null,
-      amount: record.amount,
-      date: record.date || new Date().toISOString().split('T')[0],
-      status: 'completed',
-      notes: `Registro desde QR - Ticket: ${record.ticketId}${record.teamName ? ` - Equipo: ${record.teamName}` : ''}${record.balnearioNumber ? ` - Balneario: ${record.balnearioNumber}` : ''}`,
-      createdAt: record.submittedAt || new Date().toISOString(),
-      source: 'qr',
-      ticketId: record.ticketId
-    }
+    const registerUrl = `${baseUrl}/registro?${params.toString()}`
     
-    setPayments([...payments, newPayment])
-    
-    // Actualizar estado del registro
-    setPaymentRecords(paymentRecords.map(r => 
-      r.id === record.id ? { ...r, status: 'confirmed', confirmedAt: new Date().toISOString() } : r
-    ))
-    
-    toast.success('Registro confirmado y convertido a pago')
-    setSelectedRecord(null)
+    setGeneratedRegisterQR({
+      url: registerUrl,
+      tournamentName: tournament?.name || 'Torneo de Truco',
+      tournamentId: registerQRFormData.tournamentId
+    })
   }
 
-  const handleRejectQRRecord = (recordId) => {
-    setPaymentRecords(paymentRecords.map(r => 
-      r.id === recordId ? { ...r, status: 'rejected', rejectedAt: new Date().toISOString() } : r
-    ))
-    toast.success('Registro rechazado')
-    setSelectedRecord(null)
+  const downloadRegisterQR = () => {
+    const svg = document.getElementById('register-qr-code')
+    const svgData = new XMLSerializer().serializeToString(svg)
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    const img = new Image()
+    
+    img.onload = () => {
+      canvas.width = img.width * 2
+      canvas.height = img.height * 2
+      ctx.fillStyle = 'white'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      
+      const link = document.createElement('a')
+      link.download = `qr-registro-${generatedRegisterQR.tournamentName.replace(/\s+/g, '-')}.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    }
+    
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)))
+  }
+
+  const copyRegisterLink = () => {
+    navigator.clipboard.writeText(generatedRegisterQR.url)
+    toast.success('Link copiado al portapapeles')
+  }
+
+  const handleConfirmQRRecord = async (record) => {
+    try {
+      setLoading(true)
+      // Convertir registro QR a pago registrado
+      const player = players.find(p => p.name === record.playerName || p.phone === record.phone)
+      let finalPlayerId = player ? player.id : null
+      
+      // Si no existe el jugador, crearlo
+      if (!finalPlayerId && record.playerName) {
+        const newPlayer = await createPlayer({
+          name: record.playerName,
+          phone: record.phone || '',
+          email: record.email || ''
+        })
+        finalPlayerId = newPlayer.id
+      }
+
+      const tournament = tournaments.find(t => t.name === record.tournamentName)
+      
+      // Crear pago desde registro QR
+      await createPayment({
+        type: 'entry',
+        playerId: finalPlayerId,
+        tournamentId: tournament?.id || null,
+        amount: record.amount,
+        date: record.date || new Date().toISOString().split('T')[0],
+        status: 'completed',
+        notes: `Registro desde QR - Ticket: ${record.ticketId}${record.teamName ? ` - Equipo: ${record.teamName}` : ''}${record.balnearioNumber ? ` - Balneario: ${record.balnearioNumber}` : ''}`,
+        source: 'qr',
+        ticketId: record.ticketId
+      })
+      
+      // Obtener usuario actual para asignar el registro
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      // Actualizar estado del registro y asignarlo al usuario
+      await updatePaymentRecord(record.id, {
+        status: 'confirmed',
+        confirmed_at: new Date().toISOString(),
+        user_id: user?.id || null
+      })
+      
+      toast.success('Registro confirmado y convertido a pago')
+      await loadAllData()
+      setSelectedRecord(null)
+    } catch (error) {
+      console.error('Error al confirmar registro QR:', error)
+      toast.error(error.message || 'Error al confirmar el registro')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRejectQRRecord = async (recordId) => {
+    try {
+      setLoading(true)
+      await updatePaymentRecord(recordId, {
+        status: 'rejected',
+        rejected_at: new Date().toISOString()
+      })
+      toast.success('Registro rechazado')
+      await loadAllData()
+      setSelectedRecord(null)
+    } catch (error) {
+      console.error('Error al rechazar registro QR:', error)
+      toast.error(error.message || 'Error al rechazar el registro')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -1242,6 +1552,10 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
       <div className="tab-header">
         <h2>Control de Pagos</h2>
         <div className="header-actions">
+          <button className="btn-qr" onClick={() => { setShowRegisterQRGenerator(true); setGeneratedRegisterQR(null); setRegisterQRFormData({ tournamentId: '' }) }}>
+            <QrCode size={20} />
+            QR de Registro
+          </button>
           <button className="btn-qr" onClick={() => { setShowQRGenerator(true); setGeneratedQR(null); setQRFormData({ tournamentId: '', amount: '', organizerName: '' }) }}>
             <QrCode size={20} />
             Generar Boleta QR
@@ -1413,12 +1727,12 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
             
             {selectedRecord.status === 'pending_confirmation' && (
               <div className="form-actions">
-                <button className="btn-secondary" onClick={() => handleRejectQRRecord(selectedRecord.id)}>
-                  Rechazar
+                <button className="btn-secondary" onClick={() => handleRejectQRRecord(selectedRecord.id)} disabled={loading}>
+                  {loading ? 'Procesando...' : 'Rechazar'}
                 </button>
-                <button className="btn-primary" onClick={() => handleConfirmQRRecord(selectedRecord)}>
+                <button className="btn-primary" onClick={() => handleConfirmQRRecord(selectedRecord)} disabled={loading}>
                   <CheckCircle size={20} />
-                  Confirmar y Convertir a Pago
+                  {loading ? 'Procesando...' : 'Confirmar y Convertir a Pago'}
                 </button>
               </div>
             )}
@@ -1565,6 +1879,107 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
         </div>
       )}
 
+      {/* Modal Generador de QR de Registro */}
+      {showRegisterQRGenerator && (
+        <div className="modal-overlay" onClick={() => setShowRegisterQRGenerator(false)}>
+          <div className="modal qr-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowRegisterQRGenerator(false)}>
+              <X size={24} />
+            </button>
+            
+            {!generatedRegisterQR ? (
+              <>
+                <h3><QrCode size={24} /> Generar QR de Registro</h3>
+                <p className="modal-subtitle">Crea un código QR para que nuevos jugadores se registren y se inscriban al torneo</p>
+                
+                <form onSubmit={generateRegisterQR}>
+                  <div className="form-group">
+                    <label>Torneo *</label>
+                    <select
+                      required
+                      value={registerQRFormData.tournamentId}
+                      onChange={(e) => {
+                        setRegisterQRFormData({ 
+                          ...registerQRFormData, 
+                          tournamentId: e.target.value
+                        })
+                      }}
+                    >
+                      <option value="">Seleccionar torneo...</option>
+                      {tournaments.map(t => (
+                        <option key={t.id} value={t.id}>{t.name} - Entrada: ${t.entryFee}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="form-actions">
+                    <button type="submit" className="btn-primary">
+                      <QrCode size={20} />
+                      Generar QR de Registro
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <h3><QrCode size={24} /> QR de Registro Generado</h3>
+                
+                <div className="qr-ticket">
+                  <div className="qr-ticket-header">
+                    <Trophy size={32} />
+                    <h4>Registro de Jugador</h4>
+                    <p className="ticket-id">Torneo: {generatedRegisterQR.tournamentName}</p>
+                  </div>
+                  
+                  <div className="qr-code-container">
+                    <QRCodeSVG
+                      id="register-qr-code"
+                      value={generatedRegisterQR.url}
+                      size={200}
+                      level="H"
+                      includeMargin={true}
+                      bgColor="#ffffff"
+                      fgColor="#1a1a2e"
+                    />
+                  </div>
+                  
+                  <div className="qr-ticket-info">
+                    <div className="info-row">
+                      <span>Torneo:</span>
+                      <strong>{generatedRegisterQR.tournamentName}</strong>
+                    </div>
+                  </div>
+                  
+                  <p className="qr-instructions">
+                    Escanea el código QR para registrarte y participar en el torneo
+                  </p>
+                </div>
+                
+                <div className="qr-actions">
+                  <button className="btn-action" onClick={downloadRegisterQR}>
+                    <Download size={18} />
+                    Descargar
+                  </button>
+                  <button className="btn-action" onClick={copyRegisterLink}>
+                    <Share2 size={18} />
+                    Copiar Link
+                  </button>
+                </div>
+                
+                <div className="qr-url">
+                  <label>Link de registro:</label>
+                  <input type="text" readOnly value={generatedRegisterQR.url} onClick={(e) => e.target.select()} />
+                </div>
+                
+                <button className="btn-secondary" onClick={() => setGeneratedRegisterQR(null)}>
+                  Generar Otro QR
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {showForm && (
         <div className="modal-overlay" onClick={() => { setShowForm(false); setEditingPayment(null) }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -1657,10 +2072,10 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
                 />
               </div>
               <div className="form-actions">
-                <button type="submit" className="btn-primary">
-                  {editingPayment ? 'Actualizar' : 'Registrar'}
+                <button type="submit" className="btn-primary" disabled={loading}>
+                  {loading ? 'Guardando...' : (editingPayment ? 'Actualizar' : 'Registrar')}
                 </button>
-                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingPayment(null) }}>
+                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingPayment(null) }} disabled={loading}>
                   Cancelar
                 </button>
               </div>
@@ -1925,6 +2340,131 @@ function DashboardTab({ players, tournaments, matches, payments, paymentRecords,
           )}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+// Componente de Gestión de Usuarios (Solo Administradores)
+function UsersManagementTab({ toast, loadAllData }) {
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editingUser, setEditingUser] = useState(null)
+  const [confirmRoleChange, setConfirmRoleChange] = useState(null)
+
+  useEffect(() => {
+    loadUsers()
+  }, [])
+
+  const loadUsers = async () => {
+    try {
+      setLoading(true)
+      const usersData = await getAllProfiles()
+      setUsers(usersData)
+    } catch (error) {
+      console.error('Error al cargar usuarios:', error)
+      toast.error('Error al cargar los usuarios')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRoleChange = async (userId, newRole) => {
+    try {
+      setLoading(true)
+      await updateUserRole(userId, newRole)
+      toast.success(`Rol actualizado a ${newRole === 'admin' ? 'Administrador' : 'Jugador'}`)
+      await loadUsers()
+      setConfirmRoleChange(null)
+    } catch (error) {
+      console.error('Error al actualizar rol:', error)
+      toast.error(error.message || 'Error al actualizar el rol')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading && users.length === 0) {
+    return (
+      <div className="tab-content">
+        <div className="loading-state">
+          <div className="spinner"></div>
+          <p>Cargando usuarios...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="tab-content">
+      <div className="tab-header">
+        <h2>Gestión de Usuarios</h2>
+        <p className="section-subtitle">Administra los roles de los usuarios del sistema</p>
+      </div>
+
+      <div className="cards-grid">
+        {users.length === 0 ? (
+          <div className="empty-state">
+            <User size={48} />
+            <p>No hay usuarios registrados</p>
+          </div>
+        ) : (
+          users.map(user => (
+            <div key={user.id} className="card">
+              <div className="card-header">
+                <div>
+                  <h3>{user.full_name || user.email}</h3>
+                  <span className={`role-badge ${user.role === 'admin' ? 'admin' : 'player'}`}>
+                    {user.role === 'admin' ? 'Administrador' : 'Jugador'}
+                  </span>
+                </div>
+              </div>
+              <div className="card-body">
+                <p><strong>Email:</strong> {user.email}</p>
+                {user.phone && <p><strong>Teléfono:</strong> {user.phone}</p>}
+                <p className="card-meta">
+                  Registrado: {new Date(user.created_at).toLocaleDateString('es-AR')}
+                </p>
+                
+                <div className="role-management">
+                  <label>Cambiar Rol:</label>
+                  <select
+                    value={user.role}
+                    onChange={(e) => {
+                      if (e.target.value !== user.role) {
+                        setConfirmRoleChange({
+                          userId: user.id,
+                          userName: user.full_name || user.email,
+                          currentRole: user.role,
+                          newRole: e.target.value
+                        })
+                      }
+                    }}
+                    className="role-select"
+                  >
+                    <option value="player">Jugador</option>
+                    <option value="admin">Administrador</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <ConfirmDialog
+        isOpen={confirmRoleChange !== null}
+        onClose={() => setConfirmRoleChange(null)}
+        onConfirm={() => {
+          if (confirmRoleChange) {
+            handleRoleChange(confirmRoleChange.userId, confirmRoleChange.newRole)
+          }
+        }}
+        title="Confirmar Cambio de Rol"
+        message={`¿Estás seguro de cambiar el rol de "${confirmRoleChange?.userName}" de ${confirmRoleChange?.currentRole === 'admin' ? 'Administrador' : 'Jugador'} a ${confirmRoleChange?.newRole === 'admin' ? 'Administrador' : 'Jugador'}?`}
+        confirmText="Confirmar"
+        cancelText="Cancelar"
+        type="warning"
+      />
     </div>
   )
 }

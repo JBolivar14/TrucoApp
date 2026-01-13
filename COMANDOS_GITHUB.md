@@ -54,6 +54,11 @@ git push -u origin main
 
 Vercel debería detectar automáticamente que es Vite:
 
+- **Project Name**: ⚠️ **IMPORTANTE** - Cambia el nombre a **minúsculas**:
+  - ✅ Usa: `truco-tournament-app` (correcto)
+  - ❌ NO uses: `Truco-Tournament-App` (incorrecto - mayúsculas)
+  - El nombre debe ser solo letras minúsculas, números y guiones `-`, `_`, `.`
+  - **NO** puede contener espacios o la secuencia `---`
 - **Framework Preset**: Vite (debería estar automático)
 - **Root Directory**: `./` (por defecto)
 - **Build Command**: `npm run build` (por defecto)

@@ -152,6 +152,21 @@ export async function getTournamentPlayers(tournamentId) {
   return data || []
 }
 
+// Obtener torneos con sus participantes
+export async function getTournamentsWithPlayers() {
+  const tournaments = await getTournaments()
+  const tournamentsWithPlayers = await Promise.all(
+    tournaments.map(async (tournament) => {
+      const participants = await getTournamentPlayers(tournament.id)
+      return {
+        ...tournament,
+        participants: participants.map(tp => tp.player_id)
+      }
+    })
+  )
+  return tournamentsWithPlayers
+}
+
 // ============================================
 // Partidas
 // ============================================
@@ -285,13 +300,13 @@ export async function getPaymentRecords() {
 }
 
 export async function createPaymentRecord(record) {
+  // Intentar obtener usuario, pero permitir crear sin autenticación para formularios públicos
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Usuario no autenticado')
-
+  
   const { data, error } = await supabase
     .from('payment_records')
     .insert({
-      user_id: user.id,
+      user_id: user?.id || null, // Permitir null para registros públicos
       ticket_id: record.ticketId,
       tournament_name: record.tournamentName,
       amount: record.amount,
@@ -381,4 +396,30 @@ export async function deleteTransaction(id) {
     .eq('id', id)
 
   if (error) throw error
+}
+
+// ============================================
+// Gestión de Usuarios/Perfiles
+// ============================================
+
+export async function getAllProfiles() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('created_at', { ascending: false })
+  
+  if (error) throw error
+  return data || []
+}
+
+export async function updateUserRole(userId, role) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ role: role })
+    .eq('id', userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
