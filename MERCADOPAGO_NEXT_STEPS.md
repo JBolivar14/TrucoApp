@@ -41,9 +41,9 @@ Antes de comenzar, asegúrate de tener:
 
 ---
 
-## 🔐 Paso 2: Configurar Variables de Entorno
+## 🔐 Paso 2: Configurar Variables de Entorno en Vercel
 
-### 2.1 En Vercel (Producción)
+✅ **Recomendado**: Trabajar directamente con Vercel (sin desarrollo local)
 
 1. **Ve a tu proyecto en Vercel**
    - URL: https://vercel.com/dashboard
@@ -53,22 +53,29 @@ Antes de comenzar, asegúrate de tener:
 
 3. **Agrega la variable de entorno:**
    - **Nombre**: `MERCADOPAGO_ACCESS_TOKEN`
-   - **Valor**: Tu Access Token de prueba (el que copiaste)
-   - **Environment**: Selecciona "Production", "Preview", y "Development"
+   - **Valor**: Tu Access Token de prueba (el que copiaste del panel de Mercado Pago)
+   - **Environment**: Selecciona las tres opciones:
+     - ✅ Production
+     - ✅ Preview  
+     - ✅ Development
 
-4. **Guarda los cambios**
+4. **Haz clic en "Save"** para guardar los cambios
+
+5. **IMPORTANTE**: Después de agregar la variable, Vercel necesitará hacer un nuevo deploy para aplicar los cambios. Esto sucederá automáticamente cuando hagas push de código, o puedes hacer un "Redeploy" manual desde el dashboard.
 
 ⚠️ **IMPORTANTE**: El Access Token NUNCA debe estar en el código frontend. Solo en variables de entorno del backend.
 
-### 2.2 En Local (Opcional - para desarrollo local)
+---
 
-Si quieres probar localmente, crea un archivo `.env.local` en la raíz del proyecto:
+### 📝 Nota: Desarrollo Local (Opcional)
 
-```env
-MERCADOPAGO_ACCESS_TOKEN=TEST-tu-access-token-aqui
-```
+**Puedes saltarte completamente el desarrollo local** y trabajar directamente con Vercel. Esto es perfectamente válido y a menudo más simple.
 
-⚠️ **No commitees este archivo** - agrégalo a `.gitignore`
+Si en el futuro quisieras probar localmente (opcional), podrías:
+- Crear un archivo `.env.local` con el Access Token
+- Usar `vercel dev` para emular el entorno de Vercel localmente
+
+**Pero para este proyecto, trabajar solo con Vercel es la mejor opción.**
 
 ---
 
@@ -283,39 +290,58 @@ Estas páginas deben:
 
 ---
 
-## 🧪 Paso 7: Probar la Integración
+## 🧪 Paso 7: Probar la Integración en Vercel
 
-### 7.1 En Local (Opcional)
+✅ **Recomendado**: Probar directamente en Vercel (sin desarrollo local)
 
-1. **Configura las variables de entorno** (crea `.env.local`)
-2. **Ejecuta el servidor de desarrollo:**
-   ```bash
-   npm run dev
-   ```
-3. **Prueba el flujo completo**
+### Pasos para Probar:
 
-⚠️ **NOTA**: Las API routes de Vercel funcionan diferente en local. Para probar completamente, necesitas desplegar a Vercel.
+1. **Asegúrate de haber configurado la variable de entorno** en Vercel (Paso 2)
 
-### 7.2 En Vercel (Recomendado)
-
-1. **Despliega los cambios a Vercel:**
+2. **Despliega los cambios a Vercel:**
    ```bash
    git add .
    git commit -m "feat: Integrar Mercado Pago Checkout Pro"
    git push origin main
    ```
 
-2. **Espera a que Vercel despliegue automáticamente**
+3. **Espera a que Vercel despliegue automáticamente**
+   - Ve al dashboard de Vercel para ver el progreso del deploy
+   - Espera a que el deploy termine (verás "Ready" en verde)
 
-3. **Prueba el flujo completo:**
-   - Ve a tu aplicación en Vercel
-   - Completa un formulario de pago
-   - Selecciona "Mercado Pago"
-   - Deberías ser redirigido a Mercado Pago
+4. **Prueba el flujo completo:**
+   - Ve a tu aplicación en Vercel: `https://trucoapp.vercel.app`
+   - Navega a un formulario de pago (por ejemplo, desde un QR de registro)
+   - Completa el formulario con tus datos
+   - Selecciona "Mercado Pago" como método de pago
+   - Haz clic en "Enviar" o "Pagar"
+   - Deberías ser redirigido a Mercado Pago para completar el pago
 
-4. **Prueba con tarjetas de prueba:**
+5. **Prueba con tarjetas de prueba:**
    - Usa las tarjetas documentadas en `MERCADOPAGO_INTEGRATION.md`
-   - Nombre del titular: "APRO" para pagos aprobados
+   - **Tarjeta**: `4509 9535 6623 3704` (Visa) o `5031 7557 3453 0604` (Mastercard)
+   - **CVV**: `123`
+   - **Fecha**: `11/30` (o cualquier fecha futura)
+   - **DNI**: `12345678`
+   - **Nombre del titular**: `APRO` (esto hace que el pago se apruebe)
+   - **Email**: Cualquier email de prueba
+
+6. **Verifica el resultado:**
+   - Si usaste "APRO" como nombre, el pago debería aprobarse
+   - Serás redirigido a `/pago/exitoso`
+   - El pago debería aparecer en tu panel administrativo
+
+---
+
+### 📝 Nota: Desarrollo Local (Opcional - NO necesario)
+
+**Puedes saltarte completamente el desarrollo local.** Las API routes de Vercel funcionan diferente en local y requieren configuración adicional. 
+
+**Es más simple y recomendado trabajar directamente con Vercel:**
+- ✅ No necesitas configurar nada localmente
+- ✅ Puedes probar directamente en producción
+- ✅ Las API routes funcionan perfectamente
+- ✅ Es el mismo entorno que usará tu aplicación final
 
 ---
 
