@@ -306,9 +306,11 @@ export async function createPaymentRecord(record) {
   const { data, error } = await supabase
     .from('payment_records')
     .insert({
-      user_id: user?.id || null, // Permitir null para registros públicos
+      user_id: user?.id || record.playerId || null, // Usar playerId si está disponible
       ticket_id: record.ticketId,
+      tournament_id: record.tournamentId || null,
       tournament_name: record.tournamentName,
+      player_id: record.playerId || null,
       amount: record.amount,
       player_name: record.playerName,
       team_name: record.teamName || null,

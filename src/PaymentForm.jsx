@@ -22,6 +22,9 @@ function PaymentForm() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
+  const [tournamentId, setTournamentId] = useState(null)
+  const [playerId, setPlayerId] = useState(null)
+
   useEffect(() => {
     // Decodificar datos del ticket desde URL params
     try {
@@ -29,11 +32,17 @@ function PaymentForm() {
       const amount = searchParams.get('amount') || '0'
       const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
       const organizerName = searchParams.get('organizer') || 'Organizador'
+      const tId = searchParams.get('tournamentId')
+      const pId = searchParams.get('playerId')
       
       // Datos del jugador si vienen del registro
       const playerName = searchParams.get('playerName')
       const playerPhone = searchParams.get('phone')
       const playerEmail = searchParams.get('email')
+      
+      // Guardar tournamentId y playerId
+      if (tId) setTournamentId(tId)
+      if (pId) setPlayerId(pId)
       
       setTicketData({
         id: ticketId,
@@ -66,8 +75,10 @@ function PaymentForm() {
       // Guardar registro de pago en Supabase
       await createPaymentRecord({
         ticketId,
+        tournamentId: tournamentId || null,
         tournamentName: ticketData.tournamentName,
         amount: ticketData.amount,
+        playerId: playerId || null,
         playerName: formData.playerName,
         teamName: formData.teamName || null,
         balnearioNumber: formData.balnearioNumber || null,
