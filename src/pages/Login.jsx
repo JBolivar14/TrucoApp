@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Trophy, Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { signIn, signUp, signUpWithRole, getCurrentUser } from '../services/authService'
 import { useToast } from '../hooks/useToast'
@@ -241,7 +241,19 @@ function Login() {
           </button>
         </form>
 
-        <div className="login-footer">
+          {isLogin && (
+            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+              <Link
+                to="/forgot-password"
+                className="link-button"
+                style={{ fontSize: '0.9rem' }}
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
+          )}
+
+          <div className="login-footer">
           {isLogin ? (
             <p>
               ¿No tienes cuenta?{' '}

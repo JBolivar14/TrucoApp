@@ -12,39 +12,47 @@ export const PAYMENT_PROVIDERS = {
 }
 
 /**
- * Inicializa un pago con Mercado Pago
+ * Inicializa un pago con Mercado Pago Checkout Pro
  * @param {Object} paymentData - Datos del pago
- * @returns {Promise<Object>} - URL de pago o preferencia
+ * @returns {Promise<Object>} - URL de pago (init_point)
  */
 export async function initMercadoPagoPayment(paymentData) {
-  // TODO: Integrar SDK de Mercado Pago
-  // Ejemplo de estructura:
-  /*
-  const mp = new MercadoPago('YOUR_PUBLIC_KEY')
-  const preference = {
-    items: [{
-      title: paymentData.description,
-      quantity: 1,
-      currency_id: 'ARS',
-      unit_price: paymentData.amount
-    }],
-    back_urls: {
-      success: `${window.location.origin}/pago-exitoso`,
-      failure: `${window.location.origin}/pago-error`,
-      pending: `${window.location.origin}/pago-pendiente`
-    },
-    auto_return: 'approved'
-  }
-  
-  const response = await mp.preferences.create(preference)
-  return response.body.init_point
-  */
-  
-  // Por ahora retorna un mock
-  return {
-    paymentUrl: `https://mercadopago.com/payment/${paymentData.id}`,
-    provider: PAYMENT_PROVIDERS.MERCADOPAGO,
-    status: 'pending'
+  try {
+    const baseUrl = window.location.origin;
+    
+    const response = await fetch('/api/create-preference', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        tournamentName: paymentData.tournamentName || paymentData.description,
+        amount: paymentData.amount,
+        playerName: paymentData.playerName,
+        email: paymentData.email,
+        phone: paymentData.phone,
+        ticketId: paymentData.ticketId,
+        tournamentId: paymentData.tournamentId,
+        playerId: paymentData.playerId,
+        baseUrl: baseUrl
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Error al crear preferencia de pago');
+    }
+
+    const data = await response.json();
+    return {
+      paymentUrl: data.init_point,
+      preferenceId: data.preference_id,
+      provider: PAYMENT_PROVIDERS.MERCADOPAGO,
+      status: 'pending'
+    };
+  } catch (error) {
+    console.error('Error al inicializar pago con Mercado Pago:', error);
+    throw error;
   }
 }
 

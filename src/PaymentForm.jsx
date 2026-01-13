@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { Trophy, CreditCard, CheckCircle, User, Users, MapPin, Send, AlertCircle } from 'lucide-react'
 import { createPaymentRecord } from './services/databaseService'
+import { initMercadoPagoPayment } from './services/paymentService'
 import './PaymentForm.css'
 
 function PaymentForm() {
@@ -85,7 +86,36 @@ function PaymentForm() {
     setError(null)
     
     try {
-      // Guardar registro de pago en Supabase
+      // Si el método de pago es Mercado Pago, crear preferencia y redirigir
+      if (formData.paymentMethod === 'mercadopago') {
+        // Validar datos requeridos para Mercado Pago
+        if (!formData.email || !formData.playerName) {
+          setError('Email y nombre son requeridos para pagos con Mercado Pago')
+          setLoading(false)
+          return
+        }
+
+        // Crear registro de pago primero (opcional, se puede crear después del pago)
+        // Por ahora no creamos el registro hasta que el pago se confirme
+
+        // Crear preferencia de pago en Mercado Pago
+        const paymentResult = await initMercadoPagoPayment({
+          tournamentName: ticketData.tournamentName,
+          amount: ticketData.amount,
+          playerName: formData.playerName,
+          email: formData.email,
+          phone: formData.phone,
+          ticketId: ticketId,
+          tournamentId: tournamentId,
+          playerId: playerId
+        })
+
+        // Redirigir a Mercado Pago
+        window.location.href = paymentResult.paymentUrl
+        return // No continuar con el resto del código
+      }
+
+      // Para otros métodos de pago, guardar registro normalmente
       await createPaymentRecord({
         ticketId,
         tournamentId: tournamentId || null,
@@ -104,26 +134,8 @@ function PaymentForm() {
       
       setSubmitted(true)
     } catch (err) {
-      console.error('Error al guardar registro:', err)
-      setError('Error al enviar el formulario. Por favor, intenta nuevamente.')
-      // Fallback a localStorage si Supabase falla
-      try {
-        const paymentRecords = JSON.parse(localStorage.getItem('trucoPaymentRecords') || '[]')
-        const newRecord = {
-          id: Date.now(),
-          ticketId,
-          ...ticketData,
-          ...formData,
-          submittedAt: new Date().toISOString(),
-          status: 'pending_confirmation'
-        }
-        paymentRecords.push(newRecord)
-        localStorage.setItem('trucoPaymentRecords', JSON.stringify(paymentRecords))
-        setSubmitted(true)
-        setError(null)
-      } catch (localErr) {
-        setError('Error al guardar el registro. Por favor, contacta al organizador.')
-      }
+      console.error('Error al procesar pago:', err)
+      setError(err.message || 'Error al procesar el pago. Por favor, intenta nuevamente.')
     } finally {
       setLoading(false)
     }
@@ -292,9 +304,10 @@ function PaymentForm() {
                 />
               </div>
               <div className="form-group">
-                <label>Email</label>
+                <label>Email{formData.paymentMethod === 'mercadopago' ? ' *' : ''}</label>
                 <input
                   type="email"
+                  required={formData.paymentMethod === 'mercadopago'}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="tu@email.com"
@@ -369,8 +382,18 @@ function PaymentForm() {
           <div className="form-total">
             <div className="total-row">
               <span>Total a Pagar:</span>
-              <span className="total-amount">${ticketData.amount.toLocaleString('es-AR')}</span>
+              <span className="total-amount">${ticketData.amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
+            {formData.paymentMethod === 'mercadopago' && (
+              <p className="mercadopago-notice" style={{
+                fontSize: '0.85rem',
+                color: '#666',
+                marginTop: '0.5rem',
+                fontStyle: 'italic'
+              }}>
+                Serás redirigido a Mercado Pago para completar el pago
+              </p>
+            )}
           </div>
 
           <button type="submit" className="submit-btn" disabled={loading}>

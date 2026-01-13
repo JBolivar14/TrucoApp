@@ -111,12 +111,13 @@ function App() {
       const role = profile?.role || 'player'
       setUserRole(role)
       
-      // Si es jugador y está en la ruta principal, redirigir a la vista de jugador
-      if (role === 'player' && window.location.pathname === '/') {
+      // Si no es admin, no debería estar aquí (AdminProtectedRoute debería haber redirigido)
+      if (role !== 'admin') {
         navigate('/jugador')
       }
     } catch (error) {
       console.error('Error al verificar rol:', error)
+      navigate('/jugador')
     }
   }
 
@@ -340,6 +341,7 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
   const [showForm, setShowForm] = useState(false)
   const [editingPlayer, setEditingPlayer] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({ name: '', phone: '', email: '' })
   const [loading, setLoading] = useState(false)
@@ -364,6 +366,13 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
       return
     }
 
+    // Verificar si ya existe un jugador con el mismo nombre (solo al crear, no al editar)
+    if (!editingPlayer && players.some(p => p.name.toLowerCase() === formData.name.toLowerCase())) {
+      setShowDuplicateConfirm(true)
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
       if (editingPlayer) {
@@ -376,14 +385,6 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
         toast.success('Jugador actualizado correctamente')
         await loadAllData()
       } else {
-        // Verificar si ya existe un jugador con el mismo nombre
-        if (players.some(p => p.name.toLowerCase() === formData.name.toLowerCase())) {
-          if (!window.confirm('Ya existe un jugador con ese nombre. ¿Deseas agregarlo de todas formas?')) {
-            setLoading(false)
-            return
-          }
-        }
-
         // Crear nuevo jugador
         await createPlayer({
           name: formData.name.trim(),
@@ -393,6 +394,27 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
         toast.success('Jugador agregado correctamente')
         await loadAllData()
       }
+      setFormData({ name: '', phone: '', email: '' })
+      setShowForm(false)
+    } catch (error) {
+      console.error('Error al guardar jugador:', error)
+      toast.error(error.message || 'Error al guardar el jugador')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const confirmDuplicatePlayer = async () => {
+    setShowDuplicateConfirm(false)
+    setLoading(true)
+    try {
+      await createPlayer({
+        name: formData.name.trim(),
+        phone: formData.phone || '',
+        email: formData.email || ''
+      })
+      toast.success('Jugador agregado correctamente')
+      await loadAllData()
       setFormData({ name: '', phone: '', email: '' })
       setShowForm(false)
     } catch (error) {
@@ -467,6 +489,17 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
         confirmText="Eliminar"
         cancelText="Cancelar"
         type="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={showDuplicateConfirm}
+        onClose={() => setShowDuplicateConfirm(false)}
+        onConfirm={confirmDuplicatePlayer}
+        title="Jugador Duplicado"
+        message="Ya existe un jugador con ese nombre. ¿Deseas agregarlo de todas formas?"
+        confirmText="Sí, agregar"
+        cancelText="Cancelar"
+        type="warning"
       />
 
       {showForm && (
@@ -555,6 +588,8 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
   const [editingTournament, setEditingTournament] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [showShareMenu, setShowShareMenu] = useState(null) // ID del torneo para mostrar menú
+  const [showDateConfirm, setShowDateConfirm] = useState(false)
+  const [pendingFormData, setPendingFormData] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [loading, setLoading] = useState(false)
@@ -589,9 +624,9 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
     }
 
     if (new Date(formData.date) < new Date().setHours(0, 0, 0, 0) && formData.status !== 'completed') {
-      if (!window.confirm('La fecha del torneo es anterior a hoy. ¿Deseas continuar?')) {
-        return
-      }
+      setPendingFormData({ entryFee, prizePool })
+      setShowDateConfirm(true)
+      return
     }
 
     setLoading(true)
@@ -619,6 +654,44 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
       }
       setFormData({ name: '', entryFee: '', prizePool: '', date: new Date().toISOString().split('T')[0], status: 'planned' })
       setShowForm(false)
+    } catch (error) {
+      console.error('Error al guardar torneo:', error)
+      toast.error(error.message || 'Error al guardar el torneo')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const confirmDateAction = async () => {
+    setShowDateConfirm(false)
+    if (!pendingFormData) return
+
+    setLoading(true)
+    try {
+      if (editingTournament) {
+        await updateTournament(editingTournament.id, {
+          name: formData.name.trim(),
+          entry_fee: pendingFormData.entryFee,
+          prize_pool: pendingFormData.prizePool,
+          date: formData.date,
+          status: formData.status
+        })
+        toast.success('Torneo actualizado correctamente')
+        await loadAllData()
+      } else {
+        await createTournament({
+          name: formData.name.trim(),
+          entryFee: pendingFormData.entryFee,
+          prizePool: pendingFormData.prizePool,
+          date: formData.date,
+          status: formData.status
+        })
+        toast.success('Torneo creado correctamente')
+        await loadAllData()
+      }
+      setFormData({ name: '', entryFee: '', prizePool: '', date: new Date().toISOString().split('T')[0], status: 'planned' })
+      setShowForm(false)
+      setPendingFormData(null)
     } catch (error) {
       console.error('Error al guardar torneo:', error)
       toast.error(error.message || 'Error al guardar el torneo')
@@ -757,6 +830,20 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
         confirmText="Eliminar"
         cancelText="Cancelar"
         type="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={showDateConfirm}
+        onClose={() => {
+          setShowDateConfirm(false)
+          setPendingFormData(null)
+        }}
+        onConfirm={confirmDateAction}
+        title="Fecha Anterior"
+        message="La fecha del torneo es anterior a hoy. ¿Deseas continuar?"
+        confirmText="Sí, continuar"
+        cancelText="Cancelar"
+        type="warning"
       />
 
       {showForm && (
@@ -2303,6 +2390,8 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
 // Componente Dashboard
 function DashboardTab({ players, tournaments, matches, payments, paymentRecords, exportAllData, importData, toast }) {
   const [showImportDialog, setShowImportDialog] = useState(false)
+  const [showImportConfirm, setShowImportConfirm] = useState(false)
+  const [pendingImportData, setPendingImportData] = useState(null)
 
   const handleFileImport = async (e) => {
     const file = e.target.files[0]
@@ -2310,14 +2399,21 @@ function DashboardTab({ players, tournaments, matches, payments, paymentRecords,
 
     try {
       const data = await importFromJSON(file)
-      if (window.confirm('¿Estás seguro de importar estos datos? Se sobrescribirán los datos actuales.')) {
-        importData(data)
-        setShowImportDialog(false)
-      }
+      setPendingImportData(data)
+      setShowImportConfirm(true)
     } catch (error) {
       toast.error('Error al importar el archivo: ' + error.message)
     }
     e.target.value = ''
+  }
+
+  const confirmImportAction = () => {
+    if (pendingImportData) {
+      importData(pendingImportData)
+      setShowImportDialog(false)
+      setShowImportConfirm(false)
+      setPendingImportData(null)
+    }
   }
 
   const stats = {
@@ -2361,6 +2457,20 @@ function DashboardTab({ players, tournaments, matches, payments, paymentRecords,
           </label>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={showImportConfirm}
+        onClose={() => {
+          setShowImportConfirm(false)
+          setPendingImportData(null)
+        }}
+        onConfirm={confirmImportAction}
+        title="Confirmar Importación"
+        message="¿Estás seguro de importar estos datos? Se sobrescribirán los datos actuales."
+        confirmText="Sí, importar"
+        cancelText="Cancelar"
+        type="warning"
+      />
 
       <div className="dashboard-grid">
         <div className="dashboard-stat-card">

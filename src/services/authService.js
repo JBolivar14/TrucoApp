@@ -150,6 +150,25 @@ export async function resetPassword(email) {
 }
 
 /**
+ * Actualiza la contraseña del usuario (después de reset)
+ * @param {string} newPassword - Nueva contraseña
+ * @returns {Promise<Object>}
+ */
+export async function updatePassword(newPassword) {
+  try {
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword
+    })
+
+    if (error) throw error
+
+    return { data, error: null }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+/**
  * Escucha cambios en la sesión de autenticación
  * @param {Function} callback - Función a ejecutar cuando cambie la sesión
  * @returns {Function} Función para desuscribirse
