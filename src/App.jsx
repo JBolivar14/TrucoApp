@@ -17,7 +17,6 @@ import {
 } from './services/databaseService'
 import { supabase } from './lib/supabase'
 import { getCurrentProfile, signOut } from './services/authService'
-import { useNavigate } from 'react-router-dom'
 import './App.css'
 
 // Funciones helper para transformar datos de Supabase al formato de la UI
