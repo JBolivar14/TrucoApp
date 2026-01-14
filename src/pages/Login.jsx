@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { Trophy, Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { signIn, signUp, signUpWithRole, getCurrentUser } from '../services/authService'
 import { useToast } from '../hooks/useToast'
@@ -16,6 +16,7 @@ function Login() {
     confirmPassword: ''
   })
   const [error, setError] = useState('')
+  const [searchParams] = useSearchParams()
   
   const navigate = useNavigate()
   const toast = useToast()
@@ -28,7 +29,12 @@ function Login() {
   const checkAuth = async () => {
     const { user } = await getCurrentUser()
     if (user) {
-      navigate('/')
+      const redirectTo = searchParams.get('redirectTo')
+      if (redirectTo) {
+        navigate(decodeURIComponent(redirectTo))
+      } else {
+        navigate('/')
+      }
     }
   }
 
@@ -55,7 +61,14 @@ function Login() {
         }
 
         toast.success('¡Bienvenido de nuevo!')
-        navigate('/')
+        
+        // Redirigir a la URL especificada o al dashboard por defecto
+        const redirectTo = searchParams.get('redirectTo')
+        if (redirectTo) {
+          navigate(decodeURIComponent(redirectTo))
+        } else {
+          navigate('/')
+        }
       } else {
         // Registro
         if (!formData.email || !formData.password || !formData.fullName) {

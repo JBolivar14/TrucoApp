@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Trophy, User, Mail, Phone, CheckCircle, AlertCircle, ArrowRight, Contact } from 'lucide-react'
-import { signUpWithRole } from '../services/authService'
+import { Trophy, User, Mail, Phone, CheckCircle, AlertCircle, ArrowRight, Contact, Eye, EyeOff } from 'lucide-react'
+import { signUpWithRole, getCurrentUser } from '../services/authService'
 import { useToast } from '../hooks/useToast'
 import { ToastContainer } from '../components/Toast'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import './Register.css'
 
 function Register() {
@@ -18,6 +19,7 @@ function Register() {
     password: '',
     confirmPassword: ''
   })
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [tournamentId, setTournamentId] = useState(null)
@@ -25,12 +27,25 @@ function Register() {
   const [tournamentAmount, setTournamentAmount] = useState(null)
   const [initializing, setInitializing] = useState(true)
   const [contactPickerAvailable, setContactPickerAvailable] = useState(false)
+  const [showAlreadyLoggedInDialog, setShowAlreadyLoggedInDialog] = useState(false)
 
   useEffect(() => {
     const initialize = async () => {
       try {
         setInitializing(true)
         setError('')
+        
+        // Verificar si el usuario ya está autenticado
+        const { user } = await getCurrentUser()
+        if (user) {
+          // Si está autenticado y hay datos de torneo, mostrar modal para ir al login
+          const tId = searchParams.get('tournamentId')
+          if (tId) {
+            setShowAlreadyLoggedInDialog(true)
+            setInitializing(false)
+            return
+          }
+        }
         
         // Obtener datos del QR/URL
         const tId = searchParams.get('tournamentId')
@@ -198,6 +213,24 @@ function Register() {
     setError('')
   }
 
+  const handleRedirectToLogin = () => {
+    // Guardar datos del torneo en la URL para redirección después del login
+    const tId = searchParams.get('tournamentId')
+    const tName = searchParams.get('tournamentName')
+    const tAmount = searchParams.get('amount')
+    
+    // Construir URL de retorno al checkout (generar ticket ID y construir URL completa)
+    let returnUrl = '/'
+    if (tId) {
+      const ticketId = `TRU-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+      const amount = tAmount || '0'
+      returnUrl = `/pagar/${ticketId}?tournament=${encodeURIComponent(tName || 'Torneo de Truco')}&tournamentId=${tId}&amount=${amount}`
+    }
+    const loginUrl = `/login?redirectTo=${encodeURIComponent(returnUrl)}`
+    
+    navigate(loginUrl)
+  }
+
   // Mostrar estado de carga solo si hay parámetros en la URL
   if (initializing && (searchParams.get('tournamentId') || searchParams.get('tournamentName'))) {
     return (
@@ -214,6 +247,17 @@ function Register() {
 
   return (
     <div className="register-page">
+      <ConfirmDialog
+        isOpen={showAlreadyLoggedInDialog}
+        onClose={() => setShowAlreadyLoggedInDialog(false)}
+        onConfirm={handleRedirectToLogin}
+        title="Ya estás registrado"
+        message="Ya tienes una cuenta. Por favor, inicia sesión para continuar con el pago del torneo."
+        confirmText="Ir al login"
+        cancelText="Cancelar"
+        type="info"
+      />
+      
       <div className="register-container">
         <header className="register-header">
           <Trophy className="register-icon" />
@@ -302,15 +346,24 @@ function Register() {
               <User size={18} />
               Contraseña *
             </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Mínimo 6 caracteres"
-              required
-              autoComplete="new-password"
-            />
+            <div className="password-input">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Mínimo 6 caracteres"
+                required
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
           </div>
 
           <div className="form-group">
@@ -318,15 +371,24 @@ function Register() {
               <User size={18} />
               Confirmar Contraseña *
             </label>
-            <input
-              type="password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              placeholder="Confirma tu contraseña"
-              required
-              autoComplete="new-password"
-            />
+            <div className="password-input">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                placeholder="Confirma tu contraseña"
+                required
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
           </div>
 
           <button

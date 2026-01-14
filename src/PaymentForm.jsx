@@ -95,6 +95,13 @@ function PaymentForm() {
           return
         }
 
+        // Validar que ticketData existe y tiene los datos necesarios
+        if (!ticketData || !ticketData.tournamentName || !ticketData.amount) {
+          setError('Error: Faltan datos del torneo. Por favor, recarga la página.')
+          setLoading(false)
+          return
+        }
+
         // Crear registro de pago primero (opcional, se puede crear después del pago)
         // Por ahora no creamos el registro hasta que el pago se confirme
 
