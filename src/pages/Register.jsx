@@ -6,6 +6,7 @@ import { useToast } from '../hooks/useToast'
 import { ToastContainer } from '../components/Toast'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { validateEmail, validateArgentinePhone } from '../utils/validations'
+import { supabase } from '../lib/supabase'
 import './Register.css'
 
 function Register() {
@@ -182,6 +183,28 @@ function Register() {
         setError(signUpError.message || 'Error al crear la cuenta')
         setLoading(false)
         return
+      }
+
+      // Crear registro en la tabla players para que aparezca en la sección de jugadores del admin
+      // Usamos el ID del usuario recién creado
+      if (data.user?.id) {
+        try {
+          const { error: playerError } = await supabase
+            .from('players')
+            .insert({
+              user_id: data.user.id,
+              name: formData.fullName,
+              phone: formData.phone || null,
+              email: formData.email || null
+            })
+          if (playerError) {
+            console.error('Error al crear registro de jugador:', playerError)
+            // No bloqueamos el registro si falla la creación del jugador
+          }
+        } catch (playerErr) {
+          console.error('Error al crear registro de jugador:', playerErr)
+          // No bloqueamos el registro si falla la creación del jugador
+        }
       }
 
       toast.success('¡Cuenta creada exitosamente!')
