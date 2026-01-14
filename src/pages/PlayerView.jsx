@@ -21,9 +21,16 @@ function PlayerView() {
     try {
       setLoading(true)
       const [tournamentsData, { profile }] = await Promise.all([
-        getTournaments().catch(() => []),
+        getTournaments().catch((err) => {
+          console.error('Error al cargar torneos:', err)
+          toast.error(`Error al cargar torneos: ${err.message || 'Error desconocido'}`)
+          return []
+        }),
         getCurrentProfile()
       ])
+      
+      console.log('Torneos cargados:', tournamentsData)
+      console.log('Perfil del usuario:', profile)
       
       // Filtrar solo torneos activos y planificados
       const upcomingTournaments = tournamentsData.filter(t => 
@@ -42,7 +49,7 @@ function PlayerView() {
       setUserProfile(profile)
     } catch (error) {
       console.error('Error al cargar datos:', error)
-      toast.error('Error al cargar los torneos')
+      toast.error(`Error al cargar los torneos: ${error.message || 'Error desconocido'}`)
     } finally {
       setLoading(false)
     }
