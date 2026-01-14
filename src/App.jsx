@@ -6,6 +6,7 @@ import { ToastContainer } from './components/Toast'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { useToast } from './hooks/useToast'
 import { exportToCSV, exportToJSON, exportAllData, importFromJSON } from './utils/exportData'
+import { validateEmail } from './utils/validations'
 import {
   getPlayers, createPlayer, updatePlayer, deletePlayer,
   getTournamentsWithPlayers, createTournament, updateTournament, deleteTournament,
@@ -188,65 +189,77 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-content">
-          <Trophy className="header-icon" />
+          <Trophy className="header-icon" aria-hidden="true" />
           <h1>Torneo de Truco</h1>
           <p>Gestión de Torneos y Pagos</p>
         </div>
         <div className="header-actions">
           <div className="user-info">
-            <User size={20} />
+            <User size={20} aria-hidden="true" />
             <span>{userProfile?.full_name || userProfile?.email || 'Administrador'}</span>
-            <span className="role-badge">{userRole === 'admin' ? 'Admin' : 'Jugador'}</span>
+            <span className="role-badge" aria-label={`Rol: ${userRole === 'admin' ? 'Administrador' : 'Jugador'}`}>{userRole === 'admin' ? 'Admin' : 'Jugador'}</span>
           </div>
-          <button className="btn-logout" onClick={handleSignOut}>
-            <LogOut size={20} />
+          <button className="btn-logout" onClick={handleSignOut} aria-label="Cerrar sesión">
+            <LogOut size={20} aria-hidden="true" />
             Salir
           </button>
         </div>
       </header>
 
-      <nav className="app-nav">
+      <nav className="app-nav" role="navigation" aria-label="Navegación principal">
         <button
           className={activeTab === 'dashboard' ? 'active' : ''}
           onClick={() => setActiveTab('dashboard')}
+          aria-label="Ver dashboard"
+          aria-current={activeTab === 'dashboard' ? 'page' : undefined}
         >
-          <BarChart3 size={20} />
+          <BarChart3 size={20} aria-hidden="true" />
           Dashboard
         </button>
         <button
           className={activeTab === 'players' ? 'active' : ''}
           onClick={() => setActiveTab('players')}
+          aria-label="Gestionar jugadores"
+          aria-current={activeTab === 'players' ? 'page' : undefined}
         >
-          <Users size={20} />
+          <Users size={20} aria-hidden="true" />
           Jugadores
         </button>
         <button
           className={activeTab === 'tournaments' ? 'active' : ''}
           onClick={() => setActiveTab('tournaments')}
+          aria-label="Gestionar torneos"
+          aria-current={activeTab === 'tournaments' ? 'page' : undefined}
         >
-          <Trophy size={20} />
+          <Trophy size={20} aria-hidden="true" />
           Torneos
         </button>
         <button
           className={activeTab === 'matches' ? 'active' : ''}
           onClick={() => setActiveTab('matches')}
+          aria-label="Gestionar partidas"
+          aria-current={activeTab === 'matches' ? 'page' : undefined}
         >
-          <Calendar size={20} />
+          <Calendar size={20} aria-hidden="true" />
           Partidas
         </button>
         <button
           className={activeTab === 'payments' ? 'active' : ''}
           onClick={() => setActiveTab('payments')}
+          aria-label="Gestionar pagos"
+          aria-current={activeTab === 'payments' ? 'page' : undefined}
         >
-          <DollarSign size={20} />
+          <DollarSign size={20} aria-hidden="true" />
           Pagos
         </button>
         {userRole === 'admin' && (
           <button
             className={activeTab === 'users' ? 'active' : ''}
             onClick={() => setActiveTab('users')}
+            aria-label="Gestionar usuarios"
+            aria-current={activeTab === 'users' ? 'page' : undefined}
           >
-            <User size={20} />
+            <User size={20} aria-hidden="true" />
             Usuarios
           </button>
         )}
@@ -361,9 +374,13 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
       return
     }
 
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      toast.error('El email no es válido')
-      return
+    // Validar email usando función centralizada (solo si se proporciona)
+    if (formData.email) {
+      const emailValidation = validateEmail(formData.email)
+      if (!emailValidation.isValid) {
+        toast.error(emailValidation.error)
+        return
+      }
     }
 
     // Verificar si ya existe un jugador con el mismo nombre (solo al crear, no al editar)
@@ -457,12 +474,12 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
       <div className="tab-header">
         <h2>Jugadores Registrados</h2>
         <div className="header-actions">
-          <button className="btn-secondary" onClick={() => exportToCSV(players, 'jugadores')}>
-            <Download size={18} />
+          <button className="btn-secondary" onClick={() => exportToCSV(players, 'jugadores')} aria-label="Exportar lista de jugadores a CSV">
+            <Download size={18} aria-hidden="true" />
             Exportar CSV
           </button>
-          <button className="btn-primary" onClick={() => { setShowForm(true); setEditingPlayer(null); setFormData({ name: '', phone: '', email: '' }) }}>
-            <Plus size={20} />
+          <button className="btn-primary" onClick={() => { setShowForm(true); setEditingPlayer(null); setFormData({ name: '', phone: '', email: '' }) }} aria-label="Agregar nuevo jugador">
+            <Plus size={20} aria-hidden="true" />
             Agregar Jugador
           </button>
         </div>
@@ -470,12 +487,13 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
 
       <div className="search-container">
         <div className="search-box">
-          <Search size={20} />
+          <Search size={20} aria-hidden="true" />
           <input
             type="text"
             placeholder="Buscar jugadores por nombre, teléfono o email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            aria-label="Buscar jugadores"
           />
         </div>
       </div>
@@ -561,11 +579,11 @@ function PlayersTab({ players, setPlayers, toast, loadAllData }) {
               <div className="card-header">
                 <h3>{player.name}</h3>
                 <div className="card-actions">
-                  <button className="icon-btn" onClick={() => handleEdit(player)}>
-                    <Edit2 size={16} />
+                  <button className="icon-btn" onClick={() => handleEdit(player)} aria-label={`Editar jugador ${player.name}`}>
+                    <Edit2 size={16} aria-hidden="true" />
                   </button>
-                  <button className="icon-btn danger" onClick={() => handleDelete(player.id)}>
-                    <Trash2 size={16} />
+                  <button className="icon-btn danger" onClick={() => handleDelete(player.id)} aria-label={`Eliminar jugador ${player.name}`}>
+                    <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -772,12 +790,12 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
       <div className="tab-header">
         <h2>Torneos</h2>
         <div className="header-actions">
-          <button className="btn-secondary" onClick={() => exportToCSV(tournaments, 'torneos')}>
-            <Download size={18} />
+          <button className="btn-secondary" onClick={() => exportToCSV(tournaments, 'torneos')} aria-label="Exportar lista de torneos a CSV">
+            <Download size={18} aria-hidden="true" />
             Exportar CSV
           </button>
-          <button className="btn-primary" onClick={() => { setShowForm(true); setEditingTournament(null); setFormData({ name: '', entryFee: '', prizePool: '', date: new Date().toISOString().split('T')[0], status: 'planned' }) }}>
-            <Plus size={20} />
+          <button className="btn-primary" onClick={() => { setShowForm(true); setEditingTournament(null); setFormData({ name: '', entryFee: '', prizePool: '', date: new Date().toISOString().split('T')[0], status: 'planned' }) }} aria-label="Crear nuevo torneo">
+            <Plus size={20} aria-hidden="true" />
             Crear Torneo
           </button>
         </div>
@@ -785,12 +803,13 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
 
       <div className="search-container">
         <div className="search-box">
-          <Search size={20} />
+          <Search size={20} aria-hidden="true" />
           <input
             type="text"
             placeholder="Buscar torneos..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            aria-label="Buscar torneos"
           />
         </div>
         <div className="filter-container">
@@ -951,15 +970,16 @@ function TournamentsTab({ tournaments, setTournaments, players, matches, setMatc
                     <button 
                       className="icon-btn" 
                       onClick={() => setShowShareMenu(showShareMenu === tournament.id ? null : tournament.id)}
+                      aria-label={`Compartir torneo ${tournament.name}`}
                       title="Compartir torneo"
                     >
-                      <Share2 size={16} />
+                      <Share2 size={16} aria-hidden="true" />
                     </button>
-                    <button className="icon-btn" onClick={() => handleEdit(tournament)}>
-                      <Edit2 size={16} />
+                    <button className="icon-btn" onClick={() => handleEdit(tournament)} aria-label={`Editar torneo ${tournament.name}`}>
+                      <Edit2 size={16} aria-hidden="true" />
                     </button>
-                    <button className="icon-btn danger" onClick={() => handleDelete(tournament.id)}>
-                      <Trash2 size={16} />
+                    <button className="icon-btn danger" onClick={() => handleDelete(tournament.id)} aria-label={`Eliminar torneo ${tournament.name}`}>
+                      <Trash2 size={16} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -1204,8 +1224,8 @@ function MatchesTab({ matches, setMatches, players, tournaments, toast, loadAllD
     <div className="tab-content">
       <div className="tab-header">
         <h2>Partidas</h2>
-        <button className="btn-primary" onClick={() => { setShowForm(true); setEditingMatch(null); setFormData({ tournamentId: '', player1Id: '', player2Id: '', player1Score: '', player2Score: '', date: new Date().toISOString().split('T')[0], status: 'scheduled' }) }}>
-          <Plus size={20} />
+        <button className="btn-primary" onClick={() => { setShowForm(true); setEditingMatch(null); setFormData({ tournamentId: '', player1Id: '', player2Id: '', player1Score: '', player2Score: '', date: new Date().toISOString().split('T')[0], status: 'scheduled' }) }} aria-label="Crear nueva partida">
+          <Plus size={20} aria-hidden="true" />
           Nueva Partida
         </button>
       </div>
@@ -1338,11 +1358,11 @@ function MatchesTab({ matches, setMatches, players, tournaments, toast, loadAllD
                     </span>
                   </div>
                   <div className="card-actions">
-                    <button className="icon-btn" onClick={() => handleEdit(match)}>
-                      <Edit2 size={16} />
+                    <button className="icon-btn" onClick={() => handleEdit(match)} aria-label="Editar partida">
+                      <Edit2 size={16} aria-hidden="true" />
                     </button>
-                    <button className="icon-btn danger" onClick={() => handleDelete(match.id)}>
-                      <Trash2 size={16} />
+                    <button className="icon-btn danger" onClick={() => handleDelete(match.id)} aria-label="Eliminar partida">
+                      <Trash2 size={16} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -1800,20 +1820,20 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
       <div className="tab-header">
         <h2>Control de Pagos</h2>
         <div className="header-actions">
-          <button className="btn-qr" onClick={() => { setShowRegisterQRGenerator(true); setGeneratedRegisterQR(null); setRegisterQRFormData({ tournamentId: '' }) }}>
-            <QrCode size={20} />
+          <button className="btn-qr" onClick={() => { setShowRegisterQRGenerator(true); setGeneratedRegisterQR(null); setRegisterQRFormData({ tournamentId: '' }) }} aria-label="Generar QR de registro para nuevos jugadores">
+            <QrCode size={20} aria-hidden="true" />
             QR de Registro
           </button>
-          <button className="btn-qr" onClick={() => { setShowQRGenerator(true); setGeneratedQR(null); setQRFormData({ tournamentId: '', amount: '', organizerName: '' }) }}>
-            <QrCode size={20} />
+          <button className="btn-qr" onClick={() => { setShowQRGenerator(true); setGeneratedQR(null); setQRFormData({ tournamentId: '', amount: '', organizerName: '' }) }} aria-label="Generar boleta QR de pago">
+            <QrCode size={20} aria-hidden="true" />
             Generar Boleta QR
           </button>
-          <button className="btn-secondary" onClick={() => { setShowQRRecords(true) }}>
-            <Users size={20} />
+          <button className="btn-secondary" onClick={() => { setShowQRRecords(true) }} aria-label={`Ver registros QR (${paymentRecords.length} registros)`}>
+            <Users size={20} aria-hidden="true" />
             Registros QR ({paymentRecords.length})
           </button>
-          <button className="btn-primary" onClick={() => { setShowForm(true); setEditingPayment(null); setFormData({ type: 'entry', playerId: '', tournamentId: '', amount: '', date: new Date().toISOString().split('T')[0], status: 'pending', notes: '' }) }}>
-            <Plus size={20} />
+          <button className="btn-primary" onClick={() => { setShowForm(true); setEditingPayment(null); setFormData({ type: 'entry', playerId: '', tournamentId: '', amount: '', date: new Date().toISOString().split('T')[0], status: 'pending', notes: '' }) }} aria-label="Registrar nuevo pago">
+            <Plus size={20} aria-hidden="true" />
             Registrar Pago
           </button>
         </div>
@@ -1901,8 +1921,8 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
                         </span>
                       </div>
                       <div className="card-actions">
-                        <button className="icon-btn" onClick={() => setSelectedRecord(record)}>
-                          <Edit2 size={16} />
+                        <button className="icon-btn" onClick={() => setSelectedRecord(record)} aria-label={`Ver detalles del registro QR de ${record.playerName}`}>
+                          <Edit2 size={16} aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -2357,11 +2377,11 @@ function PaymentsTab({ payments, setPayments, players, tournaments, paymentRecor
                   </span>
                 </div>
                 <div className="card-actions">
-                  <button className="icon-btn" onClick={() => handleEdit(payment)}>
-                    <Edit2 size={16} />
+                  <button className="icon-btn" onClick={() => handleEdit(payment)} aria-label="Editar pago">
+                    <Edit2 size={16} aria-hidden="true" />
                   </button>
-                  <button className="icon-btn danger" onClick={() => handleDelete(payment.id)}>
-                    <Trash2 size={16} />
+                  <button className="icon-btn danger" onClick={() => handleDelete(payment.id)} aria-label="Eliminar pago">
+                    <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { Trophy, CreditCard, CheckCircle, User, Users, MapPin, Send, AlertCircle } from 'lucide-react'
 import { createPaymentRecord } from './services/databaseService'
 import { initMercadoPagoPayment } from './services/paymentService'
+import { validateEmail } from './utils/validations'
 import './PaymentForm.css'
 
 function PaymentForm() {
@@ -89,8 +90,22 @@ function PaymentForm() {
       // Si el método de pago es Mercado Pago, crear preferencia y redirigir
       if (formData.paymentMethod === 'mercadopago') {
         // Validar datos requeridos para Mercado Pago
-        if (!formData.email || !formData.playerName) {
-          setError('Email y nombre son requeridos para pagos con Mercado Pago')
+        if (!formData.playerName) {
+          setError('El nombre es requerido para pagos con Mercado Pago')
+          setLoading(false)
+          return
+        }
+        
+        if (!formData.email) {
+          setError('El email es requerido para pagos con Mercado Pago')
+          setLoading(false)
+          return
+        }
+        
+        // Validar formato de email
+        const emailValidation = validateEmail(formData.email)
+        if (!emailValidation.isValid) {
+          setError(emailValidation.error)
           setLoading(false)
           return
         }

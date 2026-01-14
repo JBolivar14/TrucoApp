@@ -5,6 +5,7 @@ import { signUpWithRole, getCurrentUser } from '../services/authService'
 import { useToast } from '../hooks/useToast'
 import { ToastContainer } from '../components/Toast'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { validateEmail, validateArgentinePhone } from '../utils/validations'
 import './Register.css'
 
 function Register() {
@@ -140,14 +141,18 @@ function Register() {
       return
     }
 
-    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      setError('El email no es válido')
+    // Validar email usando función centralizada
+    const emailValidation = validateEmail(formData.email)
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error)
       setLoading(false)
       return
     }
 
-    if (!formData.phone || formData.phone.length < 8) {
-      setError('El teléfono es obligatorio')
+    // Validar teléfono usando función centralizada (formato argentino)
+    const phoneValidation = validateArgentinePhone(formData.phone)
+    if (!phoneValidation.isValid) {
+      setError(phoneValidation.error)
       setLoading(false)
       return
     }
